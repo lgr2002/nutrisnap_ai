@@ -1,6 +1,9 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+  ActionSheetIOS,
+  Image,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -9,24 +12,96 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { colors, radius, spacing } from "@/src/theme";
 
 export default function ScanMealScreen() {
   const [description, setDescription] = useState("");
   const [optionalDetails, setOptionalDetails] = useState("");
+  const [imageUri, setImageUri] = useState<string | null>(null);
+
+  const chooseFromLibrary = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      alert("Photo library permission is needed to upload food photos.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.85,
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      alert("Camera permission is needed to take food photos.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.85,
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
+  const handlePhotoPress = () => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Take Photo", "Choose from Library", "Remove Photo"],
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: imageUri ? 3 : undefined,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            takePhoto();
+          }
+
+          if (buttonIndex === 2) {
+            chooseFromLibrary();
+          }
+
+          if (buttonIndex === 3) {
+            setImageUri(null);
+          }
+        }
+      );
+
+      return;
+    }
+
+    chooseFromLibrary();
+  };
 
   const handleEstimateMeal = () => {
-    const mealDescription =
-      description.trim() || "Unknown meal";
+    const mealDescription = description.trim() || "Unknown meal";
 
     router.push({
       pathname: "/result",
       params: {
         mealName: mealDescription,
         optionalDetails: optionalDetails.trim(),
+        imageUri: imageUri || "",
       },
     });
   };
+
+  const canEstimate = description.trim().length > 0 || !!imageUri;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -45,13 +120,34 @@ export default function ScanMealScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.uploadBox}>
-          <Text style={styles.cameraIcon}>📷</Text>
-          <Text style={styles.uploadTitle}>Take or upload food photo</Text>
-          <Text style={styles.uploadSubtitle}>
-            Add a clear photo for a better estimate.
-          </Text>
+        <TouchableOpacity style={styles.uploadBox} onPress={handlePhotoPress}>
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.foodImage} />
+          ) : (
+            <>
+              <Text style={styles.cameraIcon}>📷</Text>
+              <Text style={styles.uploadTitle}>Take or upload food photo</Text>
+              <Text style={styles.uploadSubtitle}>
+                Add a clear photo for a better estimate.
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
+
+        {imageUri ? (
+          <View style={styles.photoActionRow}>
+            <TouchableOpacity style={styles.photoAction} onPress={handlePhotoPress}>
+              <Text style={styles.photoActionText}>Change photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.removePhotoAction}
+              onPress={() => setImageUri(null)}
+            >
+              <Text style={styles.removePhotoText}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         <View style={styles.formSection}>
           <Text style={styles.label}>Quick description</Text>
@@ -97,9 +193,10 @@ export default function ScanMealScreen() {
         <TouchableOpacity
           style={[
             styles.estimateButton,
-            !description.trim() && styles.disabledButton,
+            !canEstimate && styles.disabledButton,
           ]}
           onPress={handleEstimateMeal}
+          disabled={!canEstimate}
         >
           <Text style={styles.estimateButtonText}>Estimate Meal</Text>
         </TouchableOpacity>
@@ -162,7 +259,7 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   uploadBox: {
-    height: 210,
+    height: 230,
     borderRadius: radius.xxl,
     borderWidth: 1.5,
     borderStyle: "dashed",
@@ -171,7 +268,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.cardLarge,
-    marginBottom: 24,
+    marginBottom: 14,
+    overflow: "hidden",
+  },
+  foodImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: radius.xxl,
   },
   cameraIcon: {
     fontSize: 42,
@@ -189,6 +292,39 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
     lineHeight: 20,
+  },
+  photoActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
+  },
+  photoAction: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
+    paddingVertical: 13,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  photoActionText: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  removePhotoAction: {
+    backgroundColor: "rgba(255, 107, 107, 0.12)",
+    borderRadius: radius.pill,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  removePhotoText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: "900",
   },
   formSection: {
     marginBottom: 18,

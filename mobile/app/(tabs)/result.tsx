@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import {
+  Image,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -14,6 +15,7 @@ export default function MealResultScreen() {
   const params = useLocalSearchParams<{
     mealName?: string;
     optionalDetails?: string;
+    imageUri?: string;
     editedCalories?: string;
     editedProtein?: string;
     editedCarbs?: string;
@@ -25,6 +27,7 @@ export default function MealResultScreen() {
 
   const mealName = params.mealName || "Unknown meal";
   const optionalDetails = params.optionalDetails || "";
+  const imageUri = params.imageUri || "";
   const combinedDescription = `${mealName} ${optionalDetails}`.trim();
 
   const aiEstimate = estimateMealFromDescription(combinedDescription);
@@ -45,6 +48,7 @@ export default function MealResultScreen() {
       params: {
         mealName,
         optionalDetails,
+        imageUri,
         calories: estimate.calories.toString(),
         protein: estimate.protein.toString(),
         carbs: estimate.carbs.toString(),
@@ -87,6 +91,15 @@ export default function MealResultScreen() {
             <Text style={styles.closeText}>×</Text>
           </TouchableOpacity>
         </View>
+
+        {imageUri ? (
+          <View style={styles.imageCard}>
+            <Image source={{ uri: imageUri }} style={styles.foodImage} />
+            <View style={styles.photoBadge}>
+              <Text style={styles.photoBadgeText}>Photo attached</Text>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.resultCard}>
           <Text style={styles.mealName}>{mealName}</Text>
@@ -136,7 +149,11 @@ export default function MealResultScreen() {
 
         <View style={styles.explanationCard}>
           <Text style={styles.explanationLabel}>Why this estimate?</Text>
-          <Text style={styles.explanationText}>{estimate.explanation}</Text>
+          <Text style={styles.explanationText}>
+            {imageUri
+              ? "A photo was attached. For now, the app still uses the text-based placeholder engine. Later, the backend AI will analyse this image directly."
+              : estimate.explanation}
+          </Text>
         </View>
 
         <TouchableOpacity style={styles.editButton} onPress={handleEditEstimate}>
@@ -196,6 +213,36 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 26,
     marginTop: -2,
+  },
+  imageCard: {
+    height: 230,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.card,
+    marginBottom: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+    position: "relative",
+  },
+  foodImage: {
+    width: "100%",
+    height: "100%",
+  },
+  photoBadge: {
+    position: "absolute",
+    bottom: 14,
+    left: 14,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    borderRadius: radius.pill,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.secondary,
+  },
+  photoBadgeText: {
+    color: colors.secondary,
+    fontSize: 13,
+    fontWeight: "900",
   },
   resultCard: {
     backgroundColor: colors.cardAlt,
