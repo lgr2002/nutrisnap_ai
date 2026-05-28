@@ -12,17 +12,14 @@ import {
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
 import { mockMeals, mockTargets, mockToday, mockUser } from "@/src/data/mockData";
+import {
+  clearMealsFromStorage,
+  loadMealsFromStorage,
+  saveMealsToStorage,
+  StoredMeal,
+} from "@/src/storage/mealStorage";
 
-type Meal = {
-  id: string;
-  time: string;
-  name: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  confidence: string;
-};
+type Meal = StoredMeal;
 
 export default function HomeScreen() {
   const params = useLocalSearchParams<{
@@ -35,28 +32,66 @@ export default function HomeScreen() {
     savedMealConfidence?: string;
   }>();
 
-  const [meals, setMeals] = useState<Meal[]>(mockMeals);
+  const [meals, setMeals] = useState<Meal[]>([]);
+  const [hasLoadedMeals, setHasLoadedMeals] = useState(false);
   const lastSavedMealId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!params.savedMealId || lastSavedMealId.current === params.savedMealId) {
-      return;
-    }
+    const loadSavedMeals = async () => {
+      const savedMeals = await loadMealsFromStorage();
 
-    const newMeal: Meal = {
-      id: params.savedMealId,
-      time: "Now",
-      name: params.savedMealName || "Saved meal",
-      calories: Number(params.savedMealCalories || 0),
-      protein: Number(params.savedMealProtein || 0),
-      carbs: Number(params.savedMealCarbs || 0),
-      fat: Number(params.savedMealFat || 0),
-      confidence: params.savedMealConfidence || "Low",
+      if (savedMeals) {
+        setMeals(savedMeals);
+      } else {
+        setMeals(mockMeals);
+        await saveMealsToStorage(mockMeals);
+      }
+
+      setHasLoadedMeals(true);
     };
 
-    setMeals((currentMeals) => [newMeal, ...currentMeals]);
-    lastSavedMealId.current = params.savedMealId;
+    loadSavedMeals();
+  }, []);
+
+  useEffect(() => {
+    const addMealFromParams = async () => {
+      if (!hasLoadedMeals) {
+        return;
+      }
+
+      if (!params.savedMealId || lastSavedMealId.current === params.savedMealId) {
+        return;
+      }
+
+      const newMeal: Meal = {
+        id: params.savedMealId,
+        time: "Now",
+        name: params.savedMealName || "Saved meal",
+        calories: Number(params.savedMealCalories || 0),
+        protein: Number(params.savedMealProtein || 0),
+        carbs: Number(params.savedMealCarbs || 0),
+        fat: Number(params.savedMealFat || 0),
+        confidence: params.savedMealConfidence || "Low",
+      };
+
+      setMeals((currentMeals) => {
+        const alreadyExists = currentMeals.some((meal) => meal.id === newMeal.id);
+
+        if (alreadyExists) {
+          return currentMeals;
+        }
+
+        const updatedMeals = [newMeal, ...currentMeals];
+        saveMealsToStorage(updatedMeals);
+        return updatedMeals;
+      });
+
+      lastSavedMealId.current = params.savedMealId;
+    };
+
+    addMealFromParams();
   }, [
+    hasLoadedMeals,
     params.savedMealId,
     params.savedMealName,
     params.savedMealCalories,
@@ -67,7 +102,11 @@ export default function HomeScreen() {
   ]);
 
   const deleteMeal = (mealId: string) => {
-    setMeals((currentMeals) => currentMeals.filter((meal) => meal.id !== mealId));
+    setMeals((currentMeals) => {
+      const updatedMeals = currentMeals.filter((meal) => meal.id !== mealId);
+      saveMealsToStorage(updatedMeals);
+      return updatedMeals;
+    });
   };
 
   const confirmDeleteMeal = (mealId: string, mealName: string) => {
@@ -89,6 +128,55 @@ export default function HomeScreen() {
     ]);
   };
 
+  const resetDemoMeals = async () => {
+    setMeals(mockMeals);
+    await saveMealsToStorage(mockMeals);
+  };
+
+  const clearAllMeals = async () => {
+    setMeals([]);
+    await clearMealsFromStorage();
+    await saveMealsToStorage([]);
+  };
+
+  const confirmResetDemoMeals = () => {
+    if (Platform.OS === "web") {
+      resetDemoMeals();
+      return;
+    }
+
+    Alert.alert("Reset meals?", "This will restore the demo meal list.", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Reset",
+        style: "destructive",
+        onPress: resetDemoMeals,
+      },
+    ]);
+  };
+
+  const confirmClearAllMeals = () => {
+    if (Platform.OS === "web") {
+      clearAllMeals();
+      return;
+    }
+
+    Alert.alert("Clear all meals?", "This will remove all meals from today.", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Clear",
+        style: "destructive",
+        onPress: clearAllMeals,
+      },
+    ]);
+  };
+
   const totalCalories = meals.reduce((sum, meal) => sum + meal.calories, 0);
   const totalProtein = meals.reduce((sum, meal) => sum + meal.protein, 0);
   const totalCarbs = meals.reduce((sum, meal) => sum + meal.carbs, 0);
@@ -101,6 +189,16 @@ export default function HomeScreen() {
   )}%`;
 
   const mealCountLabel = meals.length === 1 ? "1 meal" : `${meals.length} meals`;
+
+  if (!hasLoadedMeals) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading NutriSnap...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -206,6 +304,20 @@ export default function HomeScreen() {
         >
           <Text style={styles.scanButtonText}>+ Scan Meal</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.resetButton}
+          onPress={confirmResetDemoMeals}
+        >
+          <Text style={styles.resetButtonText}>Reset demo meals</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.clearButton}
+          onPress={confirmClearAllMeals}
+        >
+          <Text style={styles.clearButtonText}>Clear all meals</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -215,6 +327,16 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "800",
   },
   container: {
     padding: spacing.screen,
@@ -438,11 +560,38 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     alignItems: "center",
     marginTop: 12,
-    marginBottom: 28,
+    marginBottom: 12,
   },
   scanButtonText: {
     color: colors.textPrimary,
     fontSize: 18,
+    fontWeight: "900",
+  },
+  resetButton: {
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
+    paddingVertical: 15,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 10,
+  },
+  resetButtonText: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  clearButton: {
+    backgroundColor: "rgba(255, 107, 107, 0.1)",
+    borderRadius: radius.pill,
+    paddingVertical: 15,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  clearButtonText: {
+    color: colors.danger,
+    fontSize: 15,
     fontWeight: "900",
   },
 });
