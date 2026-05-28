@@ -7,13 +7,7 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
-const days = [
-  { day: "Mon", date: "26 May", calories: "2,150", protein: "142g" },
-  { day: "Tue", date: "27 May", calories: "2,800", protein: "180g" },
-  { day: "Wed", date: "28 May", calories: "1,850", protein: "92g" },
-  { day: "Thu", date: "29 May", calories: "—", protein: "—" },
-  { day: "Fri", date: "30 May", calories: "—", protein: "—" },
-];
+import { mockHistory, mockWeeklySummary } from "@/src/data/mockData";
 
 export default function HistoryScreen() {
   return (
@@ -21,23 +15,31 @@ export default function HistoryScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>History</Text>
-          <Text style={styles.subtitle}>Track daily intake and weekly trends.</Text>
+          <Text style={styles.subtitle}>
+            Track daily intake and weekly trends.
+          </Text>
         </View>
 
         <View style={styles.summaryCard}>
           <Text style={styles.label}>This Week Average</Text>
-          <Text style={styles.bigNumber}>2,266</Text>
+          <Text style={styles.bigNumber}>
+            {mockWeeklySummary.averageCalories.toLocaleString()}
+          </Text>
           <Text style={styles.subText}>kcal / day</Text>
 
           <View style={styles.summaryRow}>
             <View>
               <Text style={styles.smallLabel}>Avg protein</Text>
-              <Text style={styles.smallValue}>138g</Text>
+              <Text style={styles.smallValue}>
+                {mockWeeklySummary.averageProtein}g
+              </Text>
             </View>
 
             <View>
               <Text style={styles.smallLabel}>Logged days</Text>
-              <Text style={styles.smallValue}>3 / 7</Text>
+              <Text style={styles.smallValue}>
+                {mockWeeklySummary.loggedDays}
+              </Text>
             </View>
           </View>
         </View>
@@ -55,7 +57,7 @@ export default function HistoryScreen() {
           <Text style={styles.sectionMeta}>May 26–30</Text>
         </View>
 
-        {days.map((item) => (
+        {mockHistory.map((item) => (
           <TouchableOpacity key={item.day} style={styles.dayCard}>
             <View>
               <Text style={styles.dayTitle}>{item.day}</Text>
