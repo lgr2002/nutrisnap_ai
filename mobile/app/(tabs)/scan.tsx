@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useState } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -11,6 +12,22 @@ import {
 import { colors, radius, spacing } from "@/src/theme";
 
 export default function ScanMealScreen() {
+  const [description, setDescription] = useState("");
+  const [optionalDetails, setOptionalDetails] = useState("");
+
+  const handleEstimateMeal = () => {
+    const mealDescription =
+      description.trim() || "Unknown meal";
+
+    router.push({
+      pathname: "/result",
+      params: {
+        mealName: mealDescription,
+        optionalDetails: optionalDetails.trim(),
+      },
+    });
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -43,6 +60,8 @@ export default function ScanMealScreen() {
             placeholder="Example: Thin crust BBQ beef pizza with peri peri sauce"
             placeholderTextColor={colors.textMuted}
             multiline
+            value={description}
+            onChangeText={setDescription}
           />
         </View>
 
@@ -70,12 +89,17 @@ export default function ScanMealScreen() {
             style={styles.input}
             placeholder="Extra cheese? Sauce? Oil? Drink?"
             placeholderTextColor={colors.textMuted}
+            value={optionalDetails}
+            onChangeText={setOptionalDetails}
           />
         </View>
 
         <TouchableOpacity
-          style={styles.estimateButton}
-          onPress={() => router.push("/result")}
+          style={[
+            styles.estimateButton,
+            !description.trim() && styles.disabledButton,
+          ]}
+          onPress={handleEstimateMeal}
         >
           <Text style={styles.estimateButtonText}>Estimate Meal</Text>
         </TouchableOpacity>
@@ -220,6 +244,9 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     alignItems: "center",
     marginTop: 8,
+  },
+  disabledButton: {
+    opacity: 0.55,
   },
   estimateButtonText: {
     color: colors.textPrimary,

@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import {
   SafeAreaView,
   ScrollView,
@@ -11,6 +11,14 @@ import { colors, radius, spacing } from "@/src/theme";
 import { mockMealEstimate } from "@/src/data/mockData";
 
 export default function MealResultScreen() {
+  const params = useLocalSearchParams<{
+    mealName?: string;
+    optionalDetails?: string;
+  }>();
+
+  const mealName = params.mealName || mockMealEstimate.name;
+  const optionalDetails = params.optionalDetails;
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -29,7 +37,11 @@ export default function MealResultScreen() {
         </View>
 
         <View style={styles.resultCard}>
-          <Text style={styles.mealName}>{mockMealEstimate.name}</Text>
+          <Text style={styles.mealName}>{mealName}</Text>
+
+          {optionalDetails ? (
+            <Text style={styles.optionalText}>{optionalDetails}</Text>
+          ) : null}
 
           <View style={styles.calorieBlock}>
             <Text style={styles.bigNumber}>
@@ -75,7 +87,9 @@ export default function MealResultScreen() {
         <View style={styles.explanationCard}>
           <Text style={styles.explanationLabel}>Why this estimate?</Text>
           <Text style={styles.explanationText}>
-            {mockMealEstimate.explanation}
+            This is a placeholder estimate for now. Later, this screen will use
+            the AI backend to calculate calories from the uploaded image,
+            description, portion size and optional details.
           </Text>
         </View>
 
@@ -152,7 +166,14 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 22,
     fontWeight: "900",
-    marginBottom: 18,
+    marginBottom: 8,
+  },
+  optionalText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 14,
+    lineHeight: 20,
   },
   calorieBlock: {
     flexDirection: "row",
