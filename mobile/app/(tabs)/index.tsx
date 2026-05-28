@@ -1,6 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -63,6 +65,29 @@ export default function HomeScreen() {
     params.savedMealFat,
     params.savedMealConfidence,
   ]);
+
+  const deleteMeal = (mealId: string) => {
+    setMeals((currentMeals) => currentMeals.filter((meal) => meal.id !== mealId));
+  };
+
+  const confirmDeleteMeal = (mealId: string, mealName: string) => {
+    if (Platform.OS === "web") {
+      deleteMeal(mealId);
+      return;
+    }
+
+    Alert.alert("Delete meal?", `Remove "${mealName}" from today?`, [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => deleteMeal(mealId),
+      },
+    ]);
+  };
 
   const totalCalories = meals.reduce((sum, meal) => sum + meal.calories, 0);
   const totalProtein = meals.reduce((sum, meal) => sum + meal.protein, 0);
@@ -145,15 +170,35 @@ export default function HomeScreen() {
           <Text style={styles.mealCount}>{mealCountLabel}</Text>
         </View>
 
-        {meals.map((meal) => (
-          <TouchableOpacity key={meal.id} style={styles.mealCard}>
-            <Text style={styles.mealTime}>{meal.time}</Text>
-            <Text style={styles.mealName}>{meal.name}</Text>
-            <Text style={styles.mealMeta}>
-              {meal.calories.toLocaleString()} kcal · {meal.confidence} confidence
+        {meals.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No meals logged today.</Text>
+            <Text style={styles.emptyText}>
+              Scan your first meal to start tracking.
             </Text>
-          </TouchableOpacity>
-        ))}
+          </View>
+        ) : (
+          meals.map((meal) => (
+            <View key={meal.id} style={styles.mealCard}>
+              <View style={styles.mealTopRow}>
+                <View style={styles.mealInfo}>
+                  <Text style={styles.mealTime}>{meal.time}</Text>
+                  <Text style={styles.mealName}>{meal.name}</Text>
+                  <Text style={styles.mealMeta}>
+                    {meal.calories.toLocaleString()} kcal · {meal.confidence} confidence
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.deleteCircle}
+                  onPress={() => confirmDeleteMeal(meal.id, meal.name)}
+                >
+                  <Text style={styles.deleteCircleText}>×</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
 
         <TouchableOpacity
           style={styles.scanButton}
@@ -317,6 +362,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  emptyCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.large,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+  emptyText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+  },
   mealCard: {
     backgroundColor: colors.card,
     borderRadius: radius.large,
@@ -324,6 +389,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 12,
+  },
+  mealTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  mealInfo: {
+    flex: 1,
   },
   mealTime: {
     color: colors.secondary,
@@ -341,6 +415,22 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 14,
     fontWeight: "600",
+  },
+  deleteCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255, 107, 107, 0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  deleteCircleText: {
+    color: colors.danger,
+    fontSize: 22,
+    fontWeight: "900",
+    marginTop: -2,
   },
   scanButton: {
     backgroundColor: colors.primary,

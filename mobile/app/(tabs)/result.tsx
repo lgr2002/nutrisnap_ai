@@ -14,13 +14,47 @@ export default function MealResultScreen() {
   const params = useLocalSearchParams<{
     mealName?: string;
     optionalDetails?: string;
+    editedCalories?: string;
+    editedProtein?: string;
+    editedCarbs?: string;
+    editedFat?: string;
+    calorieRange?: string;
+    confidence?: string;
+    explanation?: string;
   }>();
 
   const mealName = params.mealName || "Unknown meal";
   const optionalDetails = params.optionalDetails || "";
   const combinedDescription = `${mealName} ${optionalDetails}`.trim();
 
-  const estimate = estimateMealFromDescription(combinedDescription);
+  const aiEstimate = estimateMealFromDescription(combinedDescription);
+
+  const estimate = {
+    calories: Number(params.editedCalories || aiEstimate.calories),
+    protein: Number(params.editedProtein || aiEstimate.protein),
+    carbs: Number(params.editedCarbs || aiEstimate.carbs),
+    fat: Number(params.editedFat || aiEstimate.fat),
+    calorieRange: params.calorieRange || aiEstimate.calorieRange,
+    confidence: params.confidence || aiEstimate.confidence,
+    explanation: params.explanation || aiEstimate.explanation,
+  };
+
+  const handleEditEstimate = () => {
+    router.push({
+      pathname: "/edit",
+      params: {
+        mealName,
+        optionalDetails,
+        calories: estimate.calories.toString(),
+        protein: estimate.protein.toString(),
+        carbs: estimate.carbs.toString(),
+        fat: estimate.fat.toString(),
+        calorieRange: estimate.calorieRange,
+        confidence: estimate.confidence,
+        explanation: estimate.explanation,
+      },
+    });
+  };
 
   const handleSaveMeal = () => {
     router.push({
@@ -70,9 +104,7 @@ export default function MealResultScreen() {
 
           <View style={styles.badgeRow}>
             <View style={styles.rangeBadge}>
-              <Text style={styles.badgeText}>
-                Range: {estimate.calorieRange}
-              </Text>
+              <Text style={styles.badgeText}>Range: {estimate.calorieRange}</Text>
             </View>
 
             <View style={styles.confidenceBadge}>
@@ -107,7 +139,7 @@ export default function MealResultScreen() {
           <Text style={styles.explanationText}>{estimate.explanation}</Text>
         </View>
 
-        <TouchableOpacity style={styles.editButton}>
+        <TouchableOpacity style={styles.editButton} onPress={handleEditEstimate}>
           <Text style={styles.editButtonText}>Edit Estimate</Text>
         </TouchableOpacity>
 
