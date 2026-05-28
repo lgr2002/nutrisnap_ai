@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
+import { colors, radius, spacing } from "@/src/theme";
 export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.screen}>
@@ -126,11 +126,11 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#090A0F",
+    backgroundColor: colors.background,
   },
   container: {
-    padding: 22,
-    paddingBottom: 120,
+    padding: spacing.screen,
+    paddingBottom: spacing.bottomSafe,
   },
   header: {
     marginTop: 12,
@@ -140,12 +140,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   title: {
-    color: "#FFFFFF",
+    color: colors.textPrimary,
     fontSize: 30,
     fontWeight: "900",
   },
   subtitle: {
-    color: "#A4A8B6",
+    color: colors.textSecondary,
     fontSize: 15,
     marginTop: 6,
     fontWeight: "600",
@@ -154,25 +154,25 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: "#7C5CFF",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
-    color: "#FFFFFF",
+    color: colors.textPrimary,
     fontSize: 24,
     fontWeight: "900",
   },
   planCard: {
-    backgroundColor: "#17152B",
-    borderRadius: 28,
-    padding: 24,
+    backgroundColor: colors.cardAlt,
+    borderRadius: radius.xxl,
+    padding: spacing.cardLarge,
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: "#2B2850",
+    borderColor: colors.borderViolet,
   },
   planLabel: {
-    color: "#00D4A6",
+    color: colors.secondary,
     fontSize: 13,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -180,39 +180,39 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   planTitle: {
-    color: "#FFFFFF",
+    color: colors.textPrimary,
     fontSize: 28,
     fontWeight: "900",
     marginBottom: 10,
   },
   planText: {
-    color: "#A4A8B6",
+    color: colors.textSecondary,
     fontSize: 15,
     fontWeight: "600",
     lineHeight: 22,
     marginBottom: 18,
   },
   upgradeButton: {
-    backgroundColor: "#7C5CFF",
-    borderRadius: 999,
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
     paddingVertical: 15,
     alignItems: "center",
   },
   upgradeButtonText: {
-    color: "#FFFFFF",
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: "900",
   },
   card: {
-    backgroundColor: "#151722",
-    borderRadius: 24,
-    padding: 20,
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing.card,
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: "#252836",
+    borderColor: colors.border,
   },
   sectionTitle: {
-    color: "#FFFFFF",
+    color: colors.textPrimary,
     fontSize: 20,
     fontWeight: "900",
     marginBottom: 6,
@@ -224,28 +224,28 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   rowLabel: {
-    color: "#A4A8B6",
+    color: colors.textSecondary,
     fontSize: 15,
     fontWeight: "700",
   },
   rowValue: {
-    color: "#FFFFFF",
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: "900",
     textAlign: "right",
     flexShrink: 1,
   },
   secondaryButton: {
-    backgroundColor: "#151722",
-    borderRadius: 999,
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
     paddingVertical: 17,
     alignItems: "center",
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#252836",
+    borderColor: colors.border,
   },
   secondaryButtonText: {
-    color: "#FFFFFF",
+    color: colors.textPrimary,
     fontSize: 17,
     fontWeight: "900",
   },
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logoutButtonText: {
-    color: "#FF6B6B",
+    color: colors.danger,
     fontSize: 16,
     fontWeight: "900",
   },
