@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   Image,
   SafeAreaView,
@@ -10,6 +11,21 @@ import {
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
 import { estimateMealFromDescription } from "@/src/data/estimateMeal";
+import {
+  BackendMealEstimateResponse,
+  estimateMealWithBackend,
+} from "@/src/api/mealApi";
+
+type ResultEstimate = {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  calorieRange: string;
+  confidence: string;
+  explanation: string;
+  source: "Backend" | "Local fallback" | "Edited";
+};
 
 export default function MealResultScreen() {
   const params = useLocalSearchParams<{
@@ -30,19 +46,100 @@ export default function MealResultScreen() {
   const imageUri = params.imageUri || "";
   const combinedDescription = `${mealName} ${optionalDetails}`.trim();
 
-  const aiEstimate = estimateMealFromDescription(combinedDescription);
+  const [estimate, setEstimate] = useState<ResultEstimate | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [backendError, setBackendError] = useState("");
 
-  const estimate = {
-    calories: Number(params.editedCalories || aiEstimate.calories),
-    protein: Number(params.editedProtein || aiEstimate.protein),
-    carbs: Number(params.editedCarbs || aiEstimate.carbs),
-    fat: Number(params.editedFat || aiEstimate.fat),
-    calorieRange: params.calorieRange || aiEstimate.calorieRange,
-    confidence: params.confidence || aiEstimate.confidence,
-    explanation: params.explanation || aiEstimate.explanation,
-  };
+  useEffect(() => {
+    const loadEstimate = async () => {
+      setIsLoading(true);
+      setBackendError("");
+
+      const hasManualEdit =
+        params.editedCalories ||
+        params.editedProtein ||
+        params.editedCarbs ||
+        params.editedFat;
+
+      if (hasManualEdit) {
+        setEstimate({
+          calories: Number(params.editedCalories || 0),
+          protein: Number(params.editedProtein || 0),
+          carbs: Number(params.editedCarbs || 0),
+          fat: Number(params.editedFat || 0),
+          calorieRange: params.calorieRange || "Edited manually",
+          confidence: params.confidence || "Edited",
+          explanation:
+            params.explanation ||
+            "This estimate was manually edited by the user.",
+          source: "Edited",
+        });
+
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const backendEstimate: BackendMealEstimateResponse =
+          await estimateMealWithBackend({
+            meal_name: mealName,
+            optional_details: optionalDetails,
+            portion: "Whole meal",
+            image_attached: Boolean(imageUri),
+          });
+
+        setEstimate({
+          calories: backendEstimate.calories,
+          protein: backendEstimate.protein_g,
+          carbs: backendEstimate.carbs_g,
+          fat: backendEstimate.fat_g,
+          calorieRange: backendEstimate.calorie_range,
+          confidence: backendEstimate.confidence,
+          explanation: backendEstimate.explanation,
+          source: "Backend",
+        });
+      } catch (error) {
+        const localEstimate = estimateMealFromDescription(combinedDescription);
+
+        setBackendError(
+          "Backend unavailable. Showing local placeholder estimate."
+        );
+
+        setEstimate({
+          calories: localEstimate.calories,
+          protein: localEstimate.protein,
+          carbs: localEstimate.carbs,
+          fat: localEstimate.fat,
+          calorieRange: localEstimate.calorieRange,
+          confidence: localEstimate.confidence,
+          explanation: localEstimate.explanation,
+          source: "Local fallback",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadEstimate();
+  }, [
+    mealName,
+    optionalDetails,
+    imageUri,
+    combinedDescription,
+    params.editedCalories,
+    params.editedProtein,
+    params.editedCarbs,
+    params.editedFat,
+    params.calorieRange,
+    params.confidence,
+    params.explanation,
+  ]);
 
   const handleEditEstimate = () => {
+    if (!estimate) {
+      return;
+    }
+
     router.push({
       pathname: "/edit",
       params: {
@@ -61,6 +158,10 @@ export default function MealResultScreen() {
   };
 
   const handleSaveMeal = () => {
+    if (!estimate) {
+      return;
+    }
+
     router.push({
       pathname: "/",
       params: {
@@ -74,6 +175,26 @@ export default function MealResultScreen() {
       },
     });
   };
+
+  if (isLoading || !estimate) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingTitle}>Analysing your meal...</Text>
+
+          <View style={styles.loadingCard}>
+            <Text style={styles.loadingStep}>✓ Reading meal description</Text>
+            <Text style={styles.loadingStep}>✓ Checking backend estimate</Text>
+            <Text style={styles.loadingStep}>✓ Calculating macros</Text>
+          </View>
+
+          <Text style={styles.loadingText}>
+            This usually takes a few seconds.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -92,6 +213,12 @@ export default function MealResultScreen() {
           </TouchableOpacity>
         </View>
 
+        {backendError ? (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorText}>{backendError}</Text>
+          </View>
+        ) : null}
+
         {imageUri ? (
           <View style={styles.imageCard}>
             <Image source={{ uri: imageUri }} style={styles.foodImage} />
@@ -107,6 +234,12 @@ export default function MealResultScreen() {
           {optionalDetails ? (
             <Text style={styles.optionalText}>{optionalDetails}</Text>
           ) : null}
+
+          <View style={styles.sourceBadge}>
+            <Text style={styles.sourceBadgeText}>
+              Estimate source: {estimate.source}
+            </Text>
+          </View>
 
           <View style={styles.calorieBlock}>
             <Text style={styles.bigNumber}>
@@ -150,8 +283,8 @@ export default function MealResultScreen() {
         <View style={styles.explanationCard}>
           <Text style={styles.explanationLabel}>Why this estimate?</Text>
           <Text style={styles.explanationText}>
-            {imageUri
-              ? "A photo was attached. For now, the app still uses the text-based placeholder engine. Later, the backend AI will analyse this image directly."
+            {imageUri && estimate.source === "Backend"
+              ? `${estimate.explanation} A photo was attached, but image analysis will be added in the next AI backend stage.`
               : estimate.explanation}
           </Text>
         </View>
@@ -176,6 +309,37 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    padding: spacing.screen,
+  },
+  loadingTitle: {
+    color: colors.textPrimary,
+    fontSize: 30,
+    fontWeight: "900",
+    marginBottom: 18,
+  },
+  loadingCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 16,
+  },
+  loadingStep: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 12,
+  },
+  loadingText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
   },
   container: {
     padding: spacing.screen,
@@ -213,6 +377,20 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 26,
     marginTop: -2,
+  },
+  errorCard: {
+    backgroundColor: "rgba(255, 176, 32, 0.12)",
+    borderRadius: radius.large,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: colors.warning,
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 20,
   },
   imageCard: {
     height: 230,
@@ -264,6 +442,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 14,
     lineHeight: 20,
+  },
+  sourceBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.border,
+    borderRadius: radius.pill,
+    paddingVertical: 7,
+    paddingHorizontal: 11,
+    marginBottom: 12,
+  },
+  sourceBadgeText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "900",
   },
   calorieBlock: {
     flexDirection: "row",
