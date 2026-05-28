@@ -9,15 +9,20 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
-
+import { mockMeals, mockTargets, mockToday, mockUser } from "@/src/data/mockData";
 export default function HomeScreen() {
+  const firstMeal = mockMeals[0];
+  const calorieProgress = `${Math.round(
+    (mockToday.caloriesEaten / mockTargets.calories) * 100
+  )}%`;
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good evening, Leeon</Text>
-            <Text style={styles.date}>Today · Wed, 28 May</Text>
+            <Text style={styles.greeting}>Good evening, {mockUser.name}</Text>
+<Text style={styles.date}>{mockToday.dateLabel}</Text>
           </View>
 
           <View style={styles.notificationCircle}>
@@ -27,16 +32,20 @@ export default function HomeScreen() {
 
         <View style={styles.energyCard}>
           <Text style={styles.label}>Daily Energy</Text>
-          <Text style={styles.bigNumber}>1,850</Text>
+          <Text style={styles.bigNumber}>{mockToday.caloriesEaten.toLocaleString()}</Text>
           <Text style={styles.subText}>kcal eaten</Text>
 
           <View style={styles.energyRow}>
-            <Text style={styles.metaText}>Goal: 2,350 kcal</Text>
-            <Text style={styles.metaText}>Remaining: 500 kcal</Text>
+            <Text style={styles.metaText}>
+  Goal: {mockTargets.calories.toLocaleString()} kcal
+</Text>
+<Text style={styles.metaText}>
+  Remaining: {mockToday.caloriesRemaining.toLocaleString()} kcal
+</Text>
           </View>
 
           <View style={styles.progressTrack}>
-            <View style={styles.progressFill} />
+            <View style={[styles.progressFill, { width: calorieProgress }]} />
           </View>
         </View>
 
@@ -45,17 +54,19 @@ export default function HomeScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Protein</Text>
-            <Text style={styles.rowValue}>92g / 150g</Text>
+            <Text style={styles.rowValue}>
+  {mockToday.proteinEaten}g / {mockTargets.protein}g
+</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Carbs</Text>
-            <Text style={styles.rowValue}>170g</Text>
+           <Text style={styles.rowValue}>{mockToday.carbsEaten}g</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Fat</Text>
-            <Text style={styles.rowValue}>80g</Text>
+            <Text style={styles.rowValue}>{mockToday.fatEaten}g</Text>
           </View>
         </View>
 
@@ -68,14 +79,16 @@ export default function HomeScreen() {
 
         <View style={styles.mealsHeader}>
           <Text style={styles.sectionTitle}>Meals Today</Text>
-          <Text style={styles.mealCount}>1 meal</Text>
+          <Text style={styles.mealCount}>{mockMeals.length} meal</Text>
         </View>
 
-        <TouchableOpacity style={styles.mealCard}>
-          <Text style={styles.mealTime}>5:00 PM</Text>
-          <Text style={styles.mealName}>Domino&apos;s BBQ Beef Pizza</Text>
-          <Text style={styles.mealMeta}>1,850 kcal · Medium confidence</Text>
-        </TouchableOpacity>
+       <TouchableOpacity style={styles.mealCard}>
+  <Text style={styles.mealTime}>{firstMeal.time}</Text>
+  <Text style={styles.mealName}>{firstMeal.name}</Text>
+  <Text style={styles.mealMeta}>
+    {firstMeal.calories.toLocaleString()} kcal · {firstMeal.confidence} confidence
+  </Text>
+</TouchableOpacity>
 
         <TouchableOpacity
           style={styles.scanButton}
