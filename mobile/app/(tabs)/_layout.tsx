@@ -38,28 +38,34 @@ export default function TabLayout() {
         options={{
           title: "History",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="paperplane.fill" color={color} />
+            <IconSymbol size={28} name="chart.bar.fill" color={color} />
           ),
         }}
       />
+
       <Tabs.Screen
-  name="coach"
-  options={{
-    title: "Coach",
-    tabBarIcon: ({ color }) => (
-      <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />
-    ),
-  }}
-/>
-<Tabs.Screen
-  name="profile"
-  options={{
-    title: "Profile",
-    tabBarIcon: ({ color }) => (
-      <IconSymbol size={28} name="person.crop.circle.fill" color={color} />
-    ),
-  }}
-/>
+        name="coach"
+        options={{
+          title: "Coach",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol
+              size={28}
+              name="bubble.left.and.bubble.right.fill"
+              color={color}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="person.crop.circle.fill" color={color} />
+          ),
+        }}
+      />
 
       <Tabs.Screen
         name="result"

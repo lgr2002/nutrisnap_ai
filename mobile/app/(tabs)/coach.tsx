@@ -8,6 +8,8 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
+import { mockTargets, mockToday, mockUser } from "@/src/data/mockData";
+
 const suggestions = [
   "What should I eat next?",
   "Am I overeating today?",
@@ -16,6 +18,9 @@ const suggestions = [
 ];
 
 export default function CoachScreen() {
+  const caloriesText = `${mockToday.caloriesEaten.toLocaleString()} / ${mockTargets.calories.toLocaleString()} kcal`;
+  const proteinText = `${mockToday.proteinEaten} / ${mockTargets.protein} g`;
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -31,17 +36,17 @@ export default function CoachScreen() {
 
           <View style={styles.contextRow}>
             <Text style={styles.contextText}>Calories</Text>
-            <Text style={styles.contextValue}>1,850 / 2,350 kcal</Text>
+            <Text style={styles.contextValue}>{caloriesText}</Text>
           </View>
 
           <View style={styles.contextRow}>
             <Text style={styles.contextText}>Protein</Text>
-            <Text style={styles.contextValue}>92 / 150 g</Text>
+            <Text style={styles.contextValue}>{proteinText}</Text>
           </View>
 
           <View style={styles.contextRow}>
             <Text style={styles.contextText}>Goal</Text>
-            <Text style={styles.contextValue}>Body recomposition</Text>
+            <Text style={styles.contextValue}>{mockUser.goal}</Text>
           </View>
         </View>
 
@@ -65,14 +70,16 @@ export default function CoachScreen() {
 
         <View style={styles.chatCard}>
           <View style={styles.userBubble}>
-            <Text style={styles.userText}>I’m hungry at night. What should I eat?</Text>
+            <Text style={styles.userText}>
+              I&apos;m hungry at night. What should I eat?
+            </Text>
           </View>
 
           <View style={styles.aiBubble}>
             <Text style={styles.aiText}>
-              Based on today&apos;s log, prioritise protein and fibre. Good options:
-              eggs, Greek yoghurt, chicken, tuna, fruit, or a protein shake with
-              water or low-fat milk.
+              Based on today&apos;s log, prioritise protein and fibre. Good
+              options: eggs, Greek yoghurt, chicken, tuna, fruit, or a protein
+              shake with water or low-fat milk.
             </Text>
           </View>
         </View>
@@ -81,7 +88,7 @@ export default function CoachScreen() {
           <TextInput
             style={styles.input}
             placeholder="Ask your coach..."
-            placeholderTextColor="#666B7A"
+            placeholderTextColor={colors.textMuted}
           />
 
           <TouchableOpacity style={styles.sendButton}>

@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
+
 export default function ScanMealScreen() {
   return (
     <SafeAreaView style={styles.screen}>
@@ -19,9 +20,12 @@ export default function ScanMealScreen() {
             <Text style={styles.subtitle}>Scan or describe what you ate.</Text>
           </View>
 
-          <View style={styles.closeCircle}>
+          <TouchableOpacity
+            style={styles.closeCircle}
+            onPress={() => router.back()}
+          >
             <Text style={styles.closeText}>×</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.uploadBox}>
@@ -37,7 +41,7 @@ export default function ScanMealScreen() {
           <TextInput
             style={styles.textArea}
             placeholder="Example: Thin crust BBQ beef pizza with peri peri sauce"
-            placeholderTextColor="#666B7A"
+            placeholderTextColor={colors.textMuted}
             multiline
           />
         </View>
@@ -65,16 +69,17 @@ export default function ScanMealScreen() {
           <TextInput
             style={styles.input}
             placeholder="Extra cheese? Sauce? Oil? Drink?"
-            placeholderTextColor="#666B7A"
+            placeholderTextColor={colors.textMuted}
           />
         </View>
 
         <TouchableOpacity
-  style={styles.estimateButton}
-  onPress={() => router.push("/result")}
->
-  <Text style={styles.estimateButtonText}>Estimate Meal</Text>
-</TouchableOpacity>
+          style={styles.estimateButton}
+          onPress={() => router.push("/result")}
+        >
+          <Text style={styles.estimateButtonText}>Estimate Meal</Text>
+        </TouchableOpacity>
+
         <Text style={styles.disclaimer}>
           AI estimates are approximate. You can edit before saving.
         </Text>
