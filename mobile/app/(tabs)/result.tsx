@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
-import { mockMealEstimate } from "@/src/data/mockData";
+import { estimateMealFromDescription } from "@/src/data/estimateMeal";
 
 export default function MealResultScreen() {
   const params = useLocalSearchParams<{
@@ -16,8 +16,11 @@ export default function MealResultScreen() {
     optionalDetails?: string;
   }>();
 
-  const mealName = params.mealName || mockMealEstimate.name;
-  const optionalDetails = params.optionalDetails;
+  const mealName = params.mealName || "Unknown meal";
+  const optionalDetails = params.optionalDetails || "";
+  const combinedDescription = `${mealName} ${optionalDetails}`.trim();
+
+  const estimate = estimateMealFromDescription(combinedDescription);
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -45,7 +48,7 @@ export default function MealResultScreen() {
 
           <View style={styles.calorieBlock}>
             <Text style={styles.bigNumber}>
-              {mockMealEstimate.calories.toLocaleString()}
+              {estimate.calories.toLocaleString()}
             </Text>
             <Text style={styles.kcalText}>kcal</Text>
           </View>
@@ -53,13 +56,13 @@ export default function MealResultScreen() {
           <View style={styles.badgeRow}>
             <View style={styles.rangeBadge}>
               <Text style={styles.badgeText}>
-                Range: {mockMealEstimate.calorieRange}
+                Range: {estimate.calorieRange}
               </Text>
             </View>
 
             <View style={styles.confidenceBadge}>
               <Text style={styles.confidenceText}>
-                {mockMealEstimate.confidence} confidence
+                {estimate.confidence} confidence
               </Text>
             </View>
           </View>
@@ -70,27 +73,23 @@ export default function MealResultScreen() {
 
           <View style={styles.macroRow}>
             <Text style={styles.macroLabel}>Protein</Text>
-            <Text style={styles.macroValue}>{mockMealEstimate.protein} g</Text>
+            <Text style={styles.macroValue}>{estimate.protein} g</Text>
           </View>
 
           <View style={styles.macroRow}>
             <Text style={styles.macroLabel}>Carbs</Text>
-            <Text style={styles.macroValue}>{mockMealEstimate.carbs} g</Text>
+            <Text style={styles.macroValue}>{estimate.carbs} g</Text>
           </View>
 
           <View style={styles.macroRow}>
             <Text style={styles.macroLabel}>Fat</Text>
-            <Text style={styles.macroValue}>{mockMealEstimate.fat} g</Text>
+            <Text style={styles.macroValue}>{estimate.fat} g</Text>
           </View>
         </View>
 
         <View style={styles.explanationCard}>
           <Text style={styles.explanationLabel}>Why this estimate?</Text>
-          <Text style={styles.explanationText}>
-            This is a placeholder estimate for now. Later, this screen will use
-            the AI backend to calculate calories from the uploaded image,
-            description, portion size and optional details.
-          </Text>
+          <Text style={styles.explanationText}>{estimate.explanation}</Text>
         </View>
 
         <TouchableOpacity style={styles.editButton}>
