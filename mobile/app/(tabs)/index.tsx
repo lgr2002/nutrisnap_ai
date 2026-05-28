@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import React from "react";
 import {
   SafeAreaView,
@@ -19,16 +20,16 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.notificationCircle}>
-            <Text style={styles.notificationText}>●</Text>
+            <Text style={styles.notificationDot}>●</Text>
           </View>
         </View>
 
         <View style={styles.energyCard}>
-          <Text style={styles.cardLabel}>Daily Energy</Text>
+          <Text style={styles.label}>Daily Energy</Text>
           <Text style={styles.bigNumber}>1,850</Text>
-          <Text style={styles.kcalText}>kcal eaten</Text>
+          <Text style={styles.subText}>kcal eaten</Text>
 
-          <View style={styles.energyMetaRow}>
+          <View style={styles.energyRow}>
             <Text style={styles.metaText}>Goal: 2,350 kcal</Text>
             <Text style={styles.metaText}>Remaining: 500 kcal</Text>
           </View>
@@ -38,22 +39,22 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.macroCard}>
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>Macros</Text>
 
-          <View style={styles.macroRow}>
-            <Text style={styles.macroLabel}>Protein</Text>
-            <Text style={styles.macroValue}>92g / 150g</Text>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Protein</Text>
+            <Text style={styles.rowValue}>92g / 150g</Text>
           </View>
 
-          <View style={styles.macroRow}>
-            <Text style={styles.macroLabel}>Carbs</Text>
-            <Text style={styles.macroValue}>170g</Text>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Carbs</Text>
+            <Text style={styles.rowValue}>170g</Text>
           </View>
 
-          <View style={styles.macroRow}>
-            <Text style={styles.macroLabel}>Fat</Text>
-            <Text style={styles.macroValue}>80g</Text>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Fat</Text>
+            <Text style={styles.rowValue}>80g</Text>
           </View>
         </View>
 
@@ -70,24 +71,17 @@ export default function HomeScreen() {
         </View>
 
         <TouchableOpacity style={styles.mealCard}>
-          <View>
-            <Text style={styles.mealTime}>5:00 PM</Text>
-            <Text style={styles.mealName}>Domino’s BBQ Beef Pizza</Text>
-            <Text style={styles.mealMeta}>1,850 kcal · Medium confidence</Text>
-          </View>
+          <Text style={styles.mealTime}>5:00 PM</Text>
+          <Text style={styles.mealName}>Domino&apos;s BBQ Beef Pizza</Text>
+          <Text style={styles.mealMeta}>1,850 kcal · Medium confidence</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.scanButton}>
+        <TouchableOpacity
+          style={styles.scanButton}
+          onPress={() => router.push("/scan")}
+        >
           <Text style={styles.scanButtonText}>+ Scan Meal</Text>
-        </TouchableOpacity>
-
-        <View style={styles.bottomNav}>
-          <Text style={styles.navActive}>Home</Text>
-          <Text style={styles.navItem}>Scan</Text>
-          <Text style={styles.navItem}>History</Text>
-          <Text style={styles.navItem}>Coach</Text>
-          <Text style={styles.navItem}>Profile</Text>
-        </View>
+</TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -100,10 +94,10 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 22,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   header: {
-    marginTop: 18,
+    marginTop: 12,
     marginBottom: 24,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -129,9 +123,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#252836",
   },
-  notificationText: {
+  notificationDot: {
     color: "#00D4A6",
-    fontSize: 16,
+    fontSize: 18,
   },
   energyCard: {
     backgroundColor: "#17152B",
@@ -141,7 +135,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2B2850",
   },
-  cardLabel: {
+  label: {
     color: "#A4A8B6",
     fontSize: 13,
     fontWeight: "700",
@@ -150,17 +144,16 @@ const styles = StyleSheet.create({
   },
   bigNumber: {
     color: "#FFFFFF",
-    fontSize: 64,
+    fontSize: 62,
     fontWeight: "900",
     marginTop: 10,
   },
-  kcalText: {
+  subText: {
     color: "#A4A8B6",
     fontSize: 18,
     fontWeight: "600",
-    marginTop: -4,
   },
-  energyMetaRow: {
+  energyRow: {
     marginTop: 22,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -183,7 +176,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#7C5CFF",
     borderRadius: 999,
   },
-  macroCard: {
+  card: {
     backgroundColor: "#151722",
     borderRadius: 24,
     padding: 20,
@@ -196,17 +189,17 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "800",
   },
-  macroRow: {
+  row: {
     marginTop: 16,
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  macroLabel: {
+  rowLabel: {
     color: "#A4A8B6",
     fontSize: 16,
     fontWeight: "600",
   },
-  macroValue: {
+  rowValue: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "800",
@@ -282,25 +275,5 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "900",
-  },
-  bottomNav: {
-    backgroundColor: "#151722",
-    borderRadius: 24,
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: "#252836",
-  },
-  navActive: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  navItem: {
-    color: "#A4A8B6",
-    fontSize: 13,
-    fontWeight: "700",
   },
 });
