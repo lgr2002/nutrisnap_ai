@@ -1,5 +1,5 @@
-import { router } from "expo-router";
-import React from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -10,11 +10,72 @@ import {
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
 import { mockMeals, mockTargets, mockToday, mockUser } from "@/src/data/mockData";
+
+type Meal = {
+  id: string;
+  time: string;
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  confidence: string;
+};
+
 export default function HomeScreen() {
-  const firstMeal = mockMeals[0];
-  const calorieProgress = `${Math.round(
-    (mockToday.caloriesEaten / mockTargets.calories) * 100
+  const params = useLocalSearchParams<{
+    savedMealId?: string;
+    savedMealName?: string;
+    savedMealCalories?: string;
+    savedMealProtein?: string;
+    savedMealCarbs?: string;
+    savedMealFat?: string;
+    savedMealConfidence?: string;
+  }>();
+
+  const [meals, setMeals] = useState<Meal[]>(mockMeals);
+  const lastSavedMealId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!params.savedMealId || lastSavedMealId.current === params.savedMealId) {
+      return;
+    }
+
+    const newMeal: Meal = {
+      id: params.savedMealId,
+      time: "Now",
+      name: params.savedMealName || "Saved meal",
+      calories: Number(params.savedMealCalories || 0),
+      protein: Number(params.savedMealProtein || 0),
+      carbs: Number(params.savedMealCarbs || 0),
+      fat: Number(params.savedMealFat || 0),
+      confidence: params.savedMealConfidence || "Low",
+    };
+
+    setMeals((currentMeals) => [newMeal, ...currentMeals]);
+    lastSavedMealId.current = params.savedMealId;
+  }, [
+    params.savedMealId,
+    params.savedMealName,
+    params.savedMealCalories,
+    params.savedMealProtein,
+    params.savedMealCarbs,
+    params.savedMealFat,
+    params.savedMealConfidence,
+  ]);
+
+  const totalCalories = meals.reduce((sum, meal) => sum + meal.calories, 0);
+  const totalProtein = meals.reduce((sum, meal) => sum + meal.protein, 0);
+  const totalCarbs = meals.reduce((sum, meal) => sum + meal.carbs, 0);
+  const totalFat = meals.reduce((sum, meal) => sum + meal.fat, 0);
+  const remainingCalories = Math.max(mockTargets.calories - totalCalories, 0);
+
+  const calorieProgress = `${Math.min(
+    Math.round((totalCalories / mockTargets.calories) * 100),
+    100
   )}%`;
+
+  const mealCountLabel = meals.length === 1 ? "1 meal" : `${meals.length} meals`;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -22,7 +83,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Good evening, {mockUser.name}</Text>
-<Text style={styles.date}>{mockToday.dateLabel}</Text>
+            <Text style={styles.date}>{mockToday.dateLabel}</Text>
           </View>
 
           <View style={styles.notificationCircle}>
@@ -32,16 +93,16 @@ export default function HomeScreen() {
 
         <View style={styles.energyCard}>
           <Text style={styles.label}>Daily Energy</Text>
-          <Text style={styles.bigNumber}>{mockToday.caloriesEaten.toLocaleString()}</Text>
+          <Text style={styles.bigNumber}>{totalCalories.toLocaleString()}</Text>
           <Text style={styles.subText}>kcal eaten</Text>
 
           <View style={styles.energyRow}>
             <Text style={styles.metaText}>
-  Goal: {mockTargets.calories.toLocaleString()} kcal
-</Text>
-<Text style={styles.metaText}>
-  Remaining: {mockToday.caloriesRemaining.toLocaleString()} kcal
-</Text>
+              Goal: {mockTargets.calories.toLocaleString()} kcal
+            </Text>
+            <Text style={styles.metaText}>
+              Remaining: {remainingCalories.toLocaleString()} kcal
+            </Text>
           </View>
 
           <View style={styles.progressTrack}>
@@ -55,47 +116,51 @@ export default function HomeScreen() {
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Protein</Text>
             <Text style={styles.rowValue}>
-  {mockToday.proteinEaten}g / {mockTargets.protein}g
-</Text>
+              {totalProtein}g / {mockTargets.protein}g
+            </Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Carbs</Text>
-           <Text style={styles.rowValue}>{mockToday.carbsEaten}g</Text>
+            <Text style={styles.rowValue}>{totalCarbs}g</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Fat</Text>
-            <Text style={styles.rowValue}>{mockToday.fatEaten}g</Text>
+            <Text style={styles.rowValue}>{totalFat}g</Text>
           </View>
         </View>
 
         <View style={styles.insightCard}>
           <Text style={styles.insightLabel}>AI Insight</Text>
           <Text style={styles.insightText}>
-            Protein is decent today. Add fibre or fruit later to balance the day.
+            {totalProtein >= mockTargets.protein
+              ? "Protein target is looking strong today. Keep the next meal lighter if calories are high."
+              : "Protein is decent today. Add fibre or fruit later to balance the day."}
           </Text>
         </View>
 
         <View style={styles.mealsHeader}>
           <Text style={styles.sectionTitle}>Meals Today</Text>
-          <Text style={styles.mealCount}>{mockMeals.length} meal</Text>
+          <Text style={styles.mealCount}>{mealCountLabel}</Text>
         </View>
 
-       <TouchableOpacity style={styles.mealCard}>
-  <Text style={styles.mealTime}>{firstMeal.time}</Text>
-  <Text style={styles.mealName}>{firstMeal.name}</Text>
-  <Text style={styles.mealMeta}>
-    {firstMeal.calories.toLocaleString()} kcal · {firstMeal.confidence} confidence
-  </Text>
-</TouchableOpacity>
+        {meals.map((meal) => (
+          <TouchableOpacity key={meal.id} style={styles.mealCard}>
+            <Text style={styles.mealTime}>{meal.time}</Text>
+            <Text style={styles.mealName}>{meal.name}</Text>
+            <Text style={styles.mealMeta}>
+              {meal.calories.toLocaleString()} kcal · {meal.confidence} confidence
+            </Text>
+          </TouchableOpacity>
+        ))}
 
         <TouchableOpacity
           style={styles.scanButton}
           onPress={() => router.push("/scan")}
         >
           <Text style={styles.scanButtonText}>+ Scan Meal</Text>
-</TouchableOpacity>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -185,7 +250,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   progressFill: {
-    width: "78%",
     height: "100%",
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
@@ -259,7 +323,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 24,
+    marginBottom: 12,
   },
   mealTime: {
     color: colors.secondary,
@@ -283,6 +347,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingVertical: 18,
     alignItems: "center",
+    marginTop: 12,
     marginBottom: 28,
   },
   scanButtonText: {

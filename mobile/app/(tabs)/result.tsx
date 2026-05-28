@@ -22,6 +22,21 @@ export default function MealResultScreen() {
 
   const estimate = estimateMealFromDescription(combinedDescription);
 
+  const handleSaveMeal = () => {
+    router.push({
+      pathname: "/",
+      params: {
+        savedMealId: Date.now().toString(),
+        savedMealName: mealName,
+        savedMealCalories: estimate.calories.toString(),
+        savedMealProtein: estimate.protein.toString(),
+        savedMealCarbs: estimate.carbs.toString(),
+        savedMealFat: estimate.fat.toString(),
+        savedMealConfidence: estimate.confidence,
+      },
+    });
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -96,10 +111,7 @@ export default function MealResultScreen() {
           <Text style={styles.editButtonText}>Edit Estimate</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={() => router.push("/")}
-        >
+        <TouchableOpacity style={styles.saveButton} onPress={handleSaveMeal}>
           <Text style={styles.saveButtonText}>Save to Today</Text>
         </TouchableOpacity>
 
