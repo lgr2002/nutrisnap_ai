@@ -8,6 +8,8 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
+import { mockMealEstimate } from "@/src/data/mockData";
+
 export default function MealResultScreen() {
   return (
     <SafeAreaView style={styles.screen}>
@@ -27,20 +29,26 @@ export default function MealResultScreen() {
         </View>
 
         <View style={styles.resultCard}>
-          <Text style={styles.mealName}>Thin crust BBQ beef pizza</Text>
+          <Text style={styles.mealName}>{mockMealEstimate.name}</Text>
 
           <View style={styles.calorieBlock}>
-            <Text style={styles.bigNumber}>1,850</Text>
+            <Text style={styles.bigNumber}>
+              {mockMealEstimate.calories.toLocaleString()}
+            </Text>
             <Text style={styles.kcalText}>kcal</Text>
           </View>
 
           <View style={styles.badgeRow}>
             <View style={styles.rangeBadge}>
-              <Text style={styles.badgeText}>Range: 1,600–2,200</Text>
+              <Text style={styles.badgeText}>
+                Range: {mockMealEstimate.calorieRange}
+              </Text>
             </View>
 
             <View style={styles.confidenceBadge}>
-              <Text style={styles.confidenceText}>Medium confidence</Text>
+              <Text style={styles.confidenceText}>
+                {mockMealEstimate.confidence} confidence
+              </Text>
             </View>
           </View>
         </View>
@@ -50,25 +58,24 @@ export default function MealResultScreen() {
 
           <View style={styles.macroRow}>
             <Text style={styles.macroLabel}>Protein</Text>
-            <Text style={styles.macroValue}>85 g</Text>
+            <Text style={styles.macroValue}>{mockMealEstimate.protein} g</Text>
           </View>
 
           <View style={styles.macroRow}>
             <Text style={styles.macroLabel}>Carbs</Text>
-            <Text style={styles.macroValue}>170 g</Text>
+            <Text style={styles.macroValue}>{mockMealEstimate.carbs} g</Text>
           </View>
 
           <View style={styles.macroRow}>
             <Text style={styles.macroLabel}>Fat</Text>
-            <Text style={styles.macroValue}>80 g</Text>
+            <Text style={styles.macroValue}>{mockMealEstimate.fat} g</Text>
           </View>
         </View>
 
         <View style={styles.explanationCard}>
           <Text style={styles.explanationLabel}>Why this estimate?</Text>
           <Text style={styles.explanationText}>
-            Cheese, sausage, beef, BBQ sauce and peri peri sauce increase the
-            calorie estimate. Portion size is assumed to be one whole pizza.
+            {mockMealEstimate.explanation}
           </Text>
         </View>
 
