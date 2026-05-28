@@ -7,6 +7,8 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
+import { mockTargets, mockUser } from "@/src/data/mockData";
+
 export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.screen}>
@@ -18,13 +20,13 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>L</Text>
+            <Text style={styles.avatarText}>{mockUser.name.charAt(0)}</Text>
           </View>
         </View>
 
         <View style={styles.planCard}>
           <Text style={styles.planLabel}>Current Plan</Text>
-          <Text style={styles.planTitle}>Free Plan</Text>
+          <Text style={styles.planTitle}>{mockUser.plan}</Text>
           <Text style={styles.planText}>
             3 AI meal scans per day. Upgrade for unlimited scans, weekly reports
             and advanced coaching.
@@ -40,12 +42,12 @@ export default function ProfileScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Main goal</Text>
-            <Text style={styles.rowValue}>Body recomposition</Text>
+            <Text style={styles.rowValue}>{mockUser.goal}</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Activity</Text>
-            <Text style={styles.rowValue}>Train 3–4 days/week</Text>
+            <Text style={styles.rowValue}>{mockUser.activityLevel}</Text>
           </View>
         </View>
 
@@ -54,22 +56,24 @@ export default function ProfileScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Calories</Text>
-            <Text style={styles.rowValue}>2,350 kcal</Text>
+            <Text style={styles.rowValue}>
+              {mockTargets.calories.toLocaleString()} kcal
+            </Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Protein</Text>
-            <Text style={styles.rowValue}>150 g</Text>
+            <Text style={styles.rowValue}>{mockTargets.protein} g</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Carbs</Text>
-            <Text style={styles.rowValue}>250 g</Text>
+            <Text style={styles.rowValue}>{mockTargets.carbs} g</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Fat</Text>
-            <Text style={styles.rowValue}>75 g</Text>
+            <Text style={styles.rowValue}>{mockTargets.fat} g</Text>
           </View>
         </View>
 
@@ -78,17 +82,17 @@ export default function ProfileScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Age</Text>
-            <Text style={styles.rowValue}>22</Text>
+            <Text style={styles.rowValue}>{mockUser.age}</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Height</Text>
-            <Text style={styles.rowValue}>175 cm</Text>
+            <Text style={styles.rowValue}>{mockUser.heightCm} cm</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Weight</Text>
-            <Text style={styles.rowValue}>72 kg</Text>
+            <Text style={styles.rowValue}>{mockUser.weightKg} kg</Text>
           </View>
         </View>
 
@@ -97,17 +101,17 @@ export default function ProfileScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Units</Text>
-            <Text style={styles.rowValue}>kg / cm</Text>
+            <Text style={styles.rowValue}>{mockUser.units}</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Diet</Text>
-            <Text style={styles.rowValue}>No restriction</Text>
+            <Text style={styles.rowValue}>{mockUser.diet}</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Theme</Text>
-            <Text style={styles.rowValue}>Dark</Text>
+            <Text style={styles.rowValue}>{mockUser.theme}</Text>
           </View>
         </View>
 
