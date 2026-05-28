@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import {
   SafeAreaView,
   ScrollView,
@@ -68,10 +69,12 @@ export default function ScanMealScreen() {
           />
         </View>
 
-        <TouchableOpacity style={styles.estimateButton}>
-          <Text style={styles.estimateButtonText}>Estimate Meal</Text>
-        </TouchableOpacity>
-
+        <TouchableOpacity
+  style={styles.estimateButton}
+  onPress={() => router.push("/result")}
+>
+  <Text style={styles.estimateButtonText}>Estimate Meal</Text>
+</TouchableOpacity>
         <Text style={styles.disclaimer}>
           AI estimates are approximate. You can edit before saving.
         </Text>
