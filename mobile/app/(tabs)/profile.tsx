@@ -1,6 +1,7 @@
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Platform,
   SafeAreaView,
@@ -12,36 +13,38 @@ import {
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
 import { mockTargets, mockUser } from "@/src/data/mockData";
-import { resetOnboardingState } from "@/src/storage/onboardingStorage";
+import { supabase } from "@/src/api/supabaseClient";
+import { getPremiumStatus } from "@/src/storage/subscriptionStorage";
 import {
   loadNutritionTargets,
   loadUserProfile,
-  resetUserProfileAndTargets,
   SavedNutritionTargets,
   SavedUserProfile,
 } from "@/src/storage/userProfileStorage";
-import { API_BASE_URL, API_CONFIG_LABEL, API_ENV } from "@/src/api/config";
-import { checkSupabaseConnection, supabase } from "@/src/api/supabaseClient";
-import {
-  resetPremiumStatus,
-  getPremiumStatus,
-} from "@/src/storage/subscriptionStorage";
-import { resetTodayScanCount } from "@/src/storage/scanUsageStorage";
-import {
-  clearAuthEmail,
-  loadAuthEmail,
-  saveAuthEmail,
-} from "@/src/storage/authStorage";
+
+function getInitialLetter(email: string | null, name: string) {
+  if (email) {
+    return email.charAt(0).toUpperCase();
+  }
+
+  return name.charAt(0).toUpperCase();
+}
+
+function showMessage(title: string, message: string) {
+  if (Platform.OS === "web") {
+    alert(`${title}\n\n${message}`);
+    return;
+  }
+
+  Alert.alert(title, message);
+}
 
 export default function ProfileScreen() {
-  const [isPremium, setIsPremium] = useState(false);
-  const [authEmail, setAuthEmail] = useState<string | null>(null);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const [supabaseStatus, setSupabaseStatus] = useState({
-    ok: false,
-    message: "Not checked yet.",
-  });
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
 
   const [profile, setProfile] = useState<SavedUserProfile>({
     name: mockUser.name,
@@ -63,19 +66,19 @@ export default function ProfileScreen() {
     fat: mockTargets.fat,
   });
 
-  useEffect(() => {
-    const loadProfileData = async () => {
-      const savedProfile = await loadUserProfile();
-      const savedTargets = await loadNutritionTargets();
-      const premiumStatus = await getPremiumStatus();
-      const localAuthEmail = await loadAuthEmail();
+  const loadProfileScreen = async () => {
+    setIsLoading(true);
 
-      const { data } = await supabase.auth.getSession();
-      const sessionEmail = data.session?.user.email || null;
+    try {
+      const [premiumStatus, savedProfile, savedTargets, userResponse] =
+        await Promise.all([
+          getPremiumStatus(),
+          loadUserProfile(),
+          loadNutritionTargets(),
+          supabase.auth.getUser(),
+        ]);
 
-      if (sessionEmail) {
-        await saveAuthEmail(sessionEmail);
-      }
+      setIsPremium(premiumStatus);
 
       if (savedProfile) {
         setProfile(savedProfile);
@@ -85,113 +88,59 @@ export default function ProfileScreen() {
         setTargets(savedTargets);
       }
 
-      setIsPremium(premiumStatus);
-      setAuthEmail(sessionEmail || localAuthEmail);
-
-      const connectionStatus = await checkSupabaseConnection();
-      setSupabaseStatus(connectionStatus);
-
-      setIsCheckingAuth(false);
-    };
-
-    loadProfileData();
-  }, []);
-
-  const restartOnboarding = async () => {
-    await resetOnboardingState();
-    await resetUserProfileAndTargets();
-    router.replace("/welcome");
-  };
-
-  const resetDemoSubscription = async () => {
-    await resetPremiumStatus();
-    await resetTodayScanCount();
-    setIsPremium(false);
-
-    if (Platform.OS !== "web") {
-      Alert.alert("Demo reset", "Premium status and scan count were reset.");
+      if (userResponse.error || !userResponse.data.user) {
+        setAuthEmail(null);
+      } else {
+        setAuthEmail(userResponse.data.user.email || null);
+      }
+    } catch {
+      setAuthEmail(null);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    await clearAuthEmail();
-    setAuthEmail(null);
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileScreen();
+    }, [])
+  );
 
-    if (Platform.OS !== "web") {
-      Alert.alert("Signed out", "You have been signed out.");
-    }
-  };
-
-  const confirmRestartOnboarding = () => {
-    if (Platform.OS === "web") {
-      restartOnboarding();
+  const handleLogout = async () => {
+    if (isSigningOut) {
       return;
     }
 
-    Alert.alert(
-      "Restart onboarding?",
-      "This will show the welcome and setup flow again.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Restart",
-          style: "destructive",
-          onPress: restartOnboarding,
-        },
-      ]
+    setIsSigningOut(true);
+
+    try {
+      await supabase.auth.signOut();
+      setAuthEmail(null);
+      showMessage("Signed out", "You have been signed out of cloud sync.");
+    } catch (error) {
+      showMessage(
+        "Sign out failed",
+        error instanceof Error ? error.message : "Could not sign out."
+      );
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  const isSignedIn = Boolean(authEmail);
+  const displayName = isSignedIn ? authEmail || profile.name : profile.name;
+  const avatarLetter = getInitialLetter(authEmail, profile.name);
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color={colors.primary} size="large" />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
     );
-  };
-
-  const confirmResetDemoSubscription = () => {
-    if (Platform.OS === "web") {
-      resetDemoSubscription();
-      return;
-    }
-
-    Alert.alert(
-      "Reset demo subscription?",
-      "This will return the app to the free plan and reset today's scan count.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Reset",
-          style: "destructive",
-          onPress: resetDemoSubscription,
-        },
-      ]
-    );
-  };
-
-  const confirmSignOut = () => {
-    if (Platform.OS === "web") {
-      signOut();
-      return;
-    }
-
-    Alert.alert("Log out?", "You will be signed out of cloud sync.", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Log Out",
-        style: "destructive",
-        onPress: signOut,
-      },
-    ]);
-  };
-
-  const authTitle = authEmail ? "Cloud Account" : "Cloud Sync";
-  const authText = authEmail
-    ? `Signed in as ${authEmail}. Cloud meal sync will be enabled in the next batch.`
-    : "Sign in to prepare your meals and profile for cloud sync.";
+  }
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -203,52 +152,66 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{profile.name.charAt(0)}</Text>
+            <Text style={styles.avatarText}>{avatarLetter}</Text>
           </View>
         </View>
 
-        <View style={styles.authCard}>
-          <Text style={styles.authLabel}>{authTitle}</Text>
-          <Text style={styles.authTitle}>
-            {authEmail ? "Signed in" : "Not signed in"}
-          </Text>
-          <Text style={styles.authText}>
-            {isCheckingAuth ? "Checking account..." : authText}
-          </Text>
+        <View style={styles.cloudCard}>
+          <Text style={styles.cardLabel}>Cloud Sync</Text>
 
-          {authEmail ? (
-            <TouchableOpacity style={styles.secondarySmallButton} onPress={confirmSignOut}>
-              <Text style={styles.secondarySmallButtonText}>Log Out</Text>
-            </TouchableOpacity>
+          {isSignedIn ? (
+            <>
+              <Text style={styles.cloudTitle}>Signed in</Text>
+              <Text style={styles.cloudText}>
+                Signed in as {displayName}. Your saved meals can sync with Supabase.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.secondaryButton, isSigningOut && styles.disabledButton]}
+                onPress={handleLogout}
+                disabled={isSigningOut}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {isSigningOut ? "Signing out..." : "Log Out"}
+                </Text>
+              </TouchableOpacity>
+            </>
           ) : (
-            <TouchableOpacity
-              style={styles.authButton}
-              onPress={() => router.push("/auth")}
-            >
-              <Text style={styles.authButtonText}>Sign In / Sign Up</Text>
-            </TouchableOpacity>
+            <>
+              <Text style={styles.cloudTitle}>Not signed in</Text>
+              <Text style={styles.cloudText}>
+                Sign in to sync meals, history, and profile data across sessions.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() => router.push("/auth")}
+              >
+                <Text style={styles.primaryButtonText}>Sign In / Sign Up</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
         <View style={styles.planCard}>
-          <Text style={styles.planLabel}>Current Plan</Text>
+          <Text style={styles.cardLabel}>Current Plan</Text>
           <Text style={styles.planTitle}>
-            {isPremium ? "Premium Demo" : mockUser.plan}
+            {isPremium ? "Premium Plan" : "Free Plan"}
           </Text>
           <Text style={styles.planText}>
             {isPremium
-              ? "Unlimited demo scans are enabled locally. Real subscriptions will be added later."
+              ? "Unlimited AI meal scans, advanced coaching, and premium features."
               : "3 AI meal scans per day. Upgrade for unlimited scans, weekly reports and advanced coaching."}
           </Text>
 
-          <TouchableOpacity
-            style={styles.upgradeButton}
-            onPress={() => router.push("/paywall")}
-          >
-            <Text style={styles.upgradeButtonText}>
-              {isPremium ? "View Premium" : "Upgrade to Premium"}
-            </Text>
-          </TouchableOpacity>
+          {!isPremium ? (
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => router.push("/paywall")}
+            >
+              <Text style={styles.primaryButtonText}>Upgrade to Premium</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -263,16 +226,19 @@ export default function ProfileScreen() {
             <Text style={styles.rowLabel}>Activity</Text>
             <Text style={styles.rowValue}>{profile.activityLevel}</Text>
           </View>
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Diet style</Text>
+            <Text style={styles.rowValue}>{profile.diet}</Text>
+          </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Daily Targets</Text>
+          <Text style={styles.sectionTitle}>Nutrition Targets</Text>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Calories</Text>
-            <Text style={styles.rowValue}>
-              {targets.calories.toLocaleString()} kcal
-            </Text>
+            <Text style={styles.rowValue}>{targets.calories} kcal</Text>
           </View>
 
           <View style={styles.row}>
@@ -292,16 +258,11 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Body Details</Text>
+          <Text style={styles.sectionTitle}>Body Info</Text>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Age</Text>
             <Text style={styles.rowValue}>{profile.age}</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Sex</Text>
-            <Text style={styles.rowValue}>{profile.sex}</Text>
           </View>
 
           <View style={styles.row}>
@@ -313,81 +274,31 @@ export default function ProfileScreen() {
             <Text style={styles.rowLabel}>Weight</Text>
             <Text style={styles.rowValue}>{profile.weightKg} kg</Text>
           </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Developer Settings</Text>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>API mode</Text>
-            <Text style={styles.rowValue}>{API_CONFIG_LABEL}</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>API env</Text>
-            <Text style={styles.rowValue}>{API_ENV}</Text>
-          </View>
-
-          <Text style={styles.apiUrlText}>{API_BASE_URL}</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Supabase Status</Text>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Client</Text>
-            <Text style={styles.rowValue}>
-              {supabaseStatus.ok ? "Connected" : "Not connected"}
-            </Text>
-          </View>
-
-          <Text style={styles.apiUrlText}>{supabaseStatus.message}</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Units</Text>
             <Text style={styles.rowValue}>{profile.units}</Text>
           </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Diet</Text>
-            <Text style={styles.rowValue}>{profile.diet}</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Theme</Text>
-            <Text style={styles.rowValue}>{profile.theme}</Text>
-          </View>
         </View>
 
-        <TouchableOpacity style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>Edit Profile</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={confirmRestartOnboarding}
+          style={styles.legalButton}
+          onPress={() => router.push("/legal")}
         >
-          <Text style={styles.secondaryButtonText}>Restart Onboarding</Text>
+          <View style={styles.legalTextWrap}>
+            <Text style={styles.legalButtonTitle}>
+              Privacy, Terms & AI Disclaimer
+            </Text>
+            <Text style={styles.legalButtonSubtitle}>
+              Read how estimates, photos, and cloud data are handled.
+            </Text>
+          </View>
+          <Text style={styles.legalButtonArrow}>›</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={confirmResetDemoSubscription}
-        >
-          <Text style={styles.secondaryButtonText}>
-            Reset Premium / Scan Demo
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.logoutButton} onPress={confirmSignOut}>
-          <Text style={styles.logoutButtonText}>
-            {authEmail ? "Log Out" : "Log Out"}
-          </Text>
-        </TouchableOpacity>
+        <Text style={styles.footerText}>
+          NutriSnap AI estimates are approximate and are not medical advice.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -398,16 +309,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.screen,
+  },
+  loadingText: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 14,
+  },
   container: {
     padding: spacing.screen,
     paddingBottom: spacing.bottomSafe,
   },
   header: {
     marginTop: 12,
-    marginBottom: 24,
+    marginBottom: 22,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 16,
   },
   title: {
     color: colors.textPrimary,
@@ -421,19 +345,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   avatarCircle: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
     color: colors.textPrimary,
-    fontSize: 24,
+    fontSize: 25,
     fontWeight: "900",
   },
-  authCard: {
+  cloudCard: {
     backgroundColor: colors.cardAlt,
     borderRadius: radius.xxl,
     padding: spacing.cardLarge,
@@ -441,50 +365,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderViolet,
   },
-  authLabel: {
+  cardLabel: {
     color: colors.secondary,
     fontSize: 13,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  authTitle: {
+  cloudTitle: {
     color: colors.textPrimary,
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: "900",
     marginBottom: 10,
   },
-  authText: {
+  cloudText: {
     color: colors.textSecondary,
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 22,
-    marginBottom: 18,
-  },
-  authButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingVertical: 15,
-    alignItems: "center",
-  },
-  authButtonText: {
-    color: colors.textPrimary,
     fontSize: 16,
-    fontWeight: "900",
-  },
-  secondarySmallButton: {
-    backgroundColor: colors.card,
-    borderRadius: radius.pill,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  secondarySmallButtonText: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "900",
+    fontWeight: "700",
+    lineHeight: 24,
+    marginBottom: 18,
   },
   planCard: {
     backgroundColor: colors.cardAlt,
@@ -494,14 +394,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderViolet,
   },
-  planLabel: {
-    color: colors.secondary,
-    fontSize: 13,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
   planTitle: {
     color: colors.textPrimary,
     fontSize: 28,
@@ -510,21 +402,10 @@ const styles = StyleSheet.create({
   },
   planText: {
     color: colors.textSecondary,
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 22,
-    marginBottom: 18,
-  },
-  upgradeButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingVertical: 15,
-    alignItems: "center",
-  },
-  upgradeButtonText: {
-    color: colors.textPrimary,
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: "700",
+    lineHeight: 24,
+    marginBottom: 18,
   },
   card: {
     backgroundColor: colors.card,
@@ -536,7 +417,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.textPrimary,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "900",
     marginBottom: 6,
   },
@@ -544,7 +425,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 16,
+    gap: 14,
   },
   rowLabel: {
     color: colors.textSecondary,
@@ -558,19 +439,22 @@ const styles = StyleSheet.create({
     textAlign: "right",
     flexShrink: 1,
   },
-  apiUrlText: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 18,
-    marginTop: 14,
+  primaryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingVertical: 17,
+    alignItems: "center",
+  },
+  primaryButtonText: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    fontWeight: "900",
   },
   secondaryButton: {
     backgroundColor: colors.card,
     borderRadius: radius.pill,
     paddingVertical: 17,
     alignItems: "center",
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -579,13 +463,47 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "900",
   },
-  logoutButton: {
-    paddingVertical: 17,
-    alignItems: "center",
+  disabledButton: {
+    opacity: 0.55,
   },
-  logoutButtonText: {
-    color: colors.danger,
-    fontSize: 16,
+  legalButton: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  legalTextWrap: {
+    flex: 1,
+  },
+  legalButtonTitle: {
+    color: colors.textPrimary,
+    fontSize: 17,
     fontWeight: "900",
+    marginBottom: 5,
+  },
+  legalButtonSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 19,
+  },
+  legalButtonArrow: {
+    color: colors.textSecondary,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  footerText: {
+    color: colors.textMuted,
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginTop: 18,
   },
 });
