@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActionSheetIOS,
+  Alert,
   Image,
   Platform,
   SafeAreaView,
@@ -21,10 +22,36 @@ import {
 } from "@/src/storage/scanUsageStorage";
 import { getPremiumStatus } from "@/src/storage/subscriptionStorage";
 
+const PORTION_OPTIONS = [
+  "Small portion",
+  "Medium portion",
+  "Large portion",
+  "Half meal",
+  "Whole meal",
+  "Not sure",
+];
+
+const MEAL_TIME_OPTIONS = ["Now", "Breakfast", "Lunch", "Dinner", "Snack"];
+
+function showMessage(title: string, message: string) {
+  if (Platform.OS === "web") {
+    alert(`${title}\n\n${message}`);
+    return;
+  }
+
+  Alert.alert(title, message);
+}
+
 export default function ScanMealScreen() {
   const [description, setDescription] = useState("");
   const [optionalDetails, setOptionalDetails] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
+
+  const [selectedPortion, setSelectedPortion] = useState("Whole meal");
+  const [selectedMealTime, setSelectedMealTime] = useState("Now");
+
+  const [showPortionOptions, setShowPortionOptions] = useState(false);
+  const [showMealTimeOptions, setShowMealTimeOptions] = useState(false);
 
   const [isPremium, setIsPremium] = useState(false);
   const [scanCount, setScanCount] = useState(0);
@@ -52,7 +79,10 @@ export default function ScanMealScreen() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      alert("Photo library permission is needed to upload food photos.");
+      showMessage(
+        "Permission needed",
+        "Photo library permission is needed to upload food photos."
+      );
       return;
     }
 
@@ -72,7 +102,10 @@ export default function ScanMealScreen() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
 
     if (!permission.granted) {
-      alert("Camera permission is needed to take food photos.");
+      showMessage(
+        "Permission needed",
+        "Camera permission is needed to take food photos."
+      );
       return;
     }
 
@@ -116,6 +149,48 @@ export default function ScanMealScreen() {
     chooseFromLibrary();
   };
 
+  const showPortionPicker = () => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", ...PORTION_OPTIONS],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex > 0) {
+            setSelectedPortion(PORTION_OPTIONS[buttonIndex - 1]);
+          }
+        }
+      );
+
+      return;
+    }
+
+    setShowPortionOptions((current) => !current);
+    setShowMealTimeOptions(false);
+  };
+
+  const showMealTimePicker = () => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", ...MEAL_TIME_OPTIONS],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex > 0) {
+            setSelectedMealTime(MEAL_TIME_OPTIONS[buttonIndex - 1]);
+          }
+        }
+      );
+
+      return;
+    }
+
+    setShowMealTimeOptions((current) => !current);
+    setShowPortionOptions(false);
+  };
+
   const handleEstimateMeal = async () => {
     const canUseFreeScan = scanCount < freeLimit;
 
@@ -137,6 +212,8 @@ export default function ScanMealScreen() {
         mealName: mealDescription,
         optionalDetails: optionalDetails.trim(),
         imageUri: imageUri || "",
+        portion: selectedPortion,
+        mealTimeLabel: selectedMealTime,
       },
     });
   };
@@ -245,19 +322,73 @@ export default function ScanMealScreen() {
         <View style={styles.formSection}>
           <Text style={styles.label}>How much did you eat?</Text>
 
-          <TouchableOpacity style={styles.selectBox}>
-            <Text style={styles.selectText}>Whole meal</Text>
+          <TouchableOpacity style={styles.selectBox} onPress={showPortionPicker}>
+            <Text style={styles.selectText}>{selectedPortion}</Text>
             <Text style={styles.selectArrow}>⌄</Text>
           </TouchableOpacity>
+
+          {showPortionOptions ? (
+            <View style={styles.optionList}>
+              {PORTION_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.optionItem,
+                    selectedPortion === option && styles.selectedOptionItem,
+                  ]}
+                  onPress={() => {
+                    setSelectedPortion(option);
+                    setShowPortionOptions(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      selectedPortion === option && styles.selectedOptionText,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.formSection}>
           <Text style={styles.label}>Meal time</Text>
 
-          <TouchableOpacity style={styles.selectBox}>
-            <Text style={styles.selectText}>Today, 5:00 PM</Text>
+          <TouchableOpacity style={styles.selectBox} onPress={showMealTimePicker}>
+            <Text style={styles.selectText}>{selectedMealTime}</Text>
             <Text style={styles.selectArrow}>⌄</Text>
           </TouchableOpacity>
+
+          {showMealTimeOptions ? (
+            <View style={styles.optionList}>
+              {MEAL_TIME_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.optionItem,
+                    selectedMealTime === option && styles.selectedOptionItem,
+                  ]}
+                  onPress={() => {
+                    setSelectedMealTime(option);
+                    setShowMealTimeOptions(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      selectedMealTime === option && styles.selectedOptionText,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.formSection}>
@@ -530,6 +661,31 @@ const styles = StyleSheet.create({
   selectArrow: {
     color: colors.textSecondary,
     fontSize: 22,
+  },
+  optionList: {
+    backgroundColor: colors.card,
+    borderRadius: radius.large,
+    marginTop: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  optionItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  selectedOptionItem: {
+    backgroundColor: colors.cardAlt,
+  },
+  optionText: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  selectedOptionText: {
+    color: colors.secondary,
   },
   estimateButton: {
     backgroundColor: colors.primary,
