@@ -21,3 +21,4 @@ class MealEstimateResponse(BaseModel):
     carbs_g: int
     fat_g: int
     explanation: str
+    source: str = "rule_fallback"

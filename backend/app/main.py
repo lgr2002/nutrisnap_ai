@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,14 +6,15 @@ from app.models import MealEstimateRequest, MealEstimateResponse
 from app.services.meal_estimator import estimate_meal
 
 
+load_dotenv()
+
+
 app = FastAPI(
     title="NutriSnap AI Backend",
     description="Backend API for AI-powered calorie and macro estimation.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
-# During development, allow local frontend/mobile app requests.
-# Later, restrict this to production app domains.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,6 +29,7 @@ def root():
     return {
         "message": "NutriSnap AI backend is running",
         "status": "ok",
+        "version": "0.2.0",
     }
 
 
