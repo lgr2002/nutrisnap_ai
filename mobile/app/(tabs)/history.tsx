@@ -1,86 +1,134 @@
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
-import { mockMeals, mockTargets, mockUser } from "@/src/data/mockData";
-import { loadMealsFromStorage, StoredMeal } from "@/src/storage/mealStorage";
 import {
-  loadNutritionTargets,
-  loadUserProfile,
-  SavedNutritionTargets,
-  SavedUserProfile,
-} from "@/src/storage/userProfileStorage";
-import {
-  calculateDailyTotals,
-  getCalorieProgressPercent,
-  getCalorieStatusLabel,
-  getProteinStatusLabel,
-} from "@/src/utils/nutritionSummary";
+  CloudMeal,
+  deleteCloudMeal,
+  loadCloudMeals,
+} from "@/src/api/mealCloudApi";
+
+function formatMealDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown time";
+  }
+
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatMealTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function groupMealsByDate(meals: CloudMeal[]) {
+  return meals.reduce<Record<string, CloudMeal[]>>((groups, meal) => {
+    const label = formatMealDate(meal.meal_time);
+    const existing = groups[label] || [];
+
+    return {
+      ...groups,
+      [label]: [...existing, meal],
+    };
+  }, {});
+}
 
 export default function HistoryScreen() {
-  const [meals, setMeals] = useState<StoredMeal[]>([]);
+  const [meals, setMeals] = useState<CloudMeal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
 
-  const [profile, setProfile] = useState<SavedUserProfile>({
-    name: mockUser.name,
-    goal: mockUser.goal,
-    age: mockUser.age,
-    heightCm: mockUser.heightCm,
-    weightKg: mockUser.weightKg,
-    sex: "Male",
-    activityLevel: mockUser.activityLevel,
-    units: mockUser.units,
-    diet: mockUser.diet,
-    theme: mockUser.theme,
-  });
+  const loadMeals = async (refreshing = false) => {
+    if (refreshing) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
 
-  const [targets, setTargets] = useState<SavedNutritionTargets>({
-    calories: mockTargets.calories,
-    protein: mockTargets.protein,
-    carbs: mockTargets.carbs,
-    fat: mockTargets.fat,
-  });
+    const result = await loadCloudMeals();
 
-  useEffect(() => {
-    const loadHistoryData = async () => {
-      const savedMeals = await loadMealsFromStorage();
-      const savedProfile = await loadUserProfile();
-      const savedTargets = await loadNutritionTargets();
+    setMeals(result.meals);
+    setStatusMessage(result.message);
 
-      setMeals(savedMeals || mockMeals);
+    setIsLoading(false);
+    setIsRefreshing(false);
+  };
 
-      if (savedProfile) {
-        setProfile(savedProfile);
+  useFocusEffect(
+    useCallback(() => {
+      loadMeals();
+    }, [])
+  );
+
+  const handleDeleteMeal = async (meal: CloudMeal) => {
+    const deleteMeal = async () => {
+      const result = await deleteCloudMeal(meal.id);
+
+      if (!result.ok) {
+        if (Platform.OS !== "web") {
+          Alert.alert("Delete failed", result.message);
+        }
+        return;
       }
 
-      if (savedTargets) {
-        setTargets(savedTargets);
-      }
-
-      setIsLoading(false);
+      setMeals((currentMeals) =>
+        currentMeals.filter((currentMeal) => currentMeal.id !== meal.id)
+      );
     };
 
-    loadHistoryData();
-  }, []);
+    if (Platform.OS === "web") {
+      deleteMeal();
+      return;
+    }
 
-  const totals = calculateDailyTotals(meals);
-  const calorieProgress = getCalorieProgressPercent(totals, targets);
-  const calorieStatus = getCalorieStatusLabel(totals, targets);
-  const proteinStatus = getProteinStatusLabel(totals, targets);
+    Alert.alert("Delete meal?", `Remove ${meal.meal_name} from cloud history?`, [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: deleteMeal,
+      },
+    ]);
+  };
 
-  const averageCalories =
-    meals.length > 0 ? Math.round(totals.calories / Math.max(meals.length, 1)) : 0;
+  const groupedMeals = groupMealsByDate(meals);
+  const groupLabels = Object.keys(groupedMeals);
 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading history...</Text>
+          <ActivityIndicator color={colors.primary} size="large" />
+          <Text style={styles.loadingText}>Loading cloud history...</Text>
         </View>
       </SafeAreaView>
     );
@@ -88,114 +136,89 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => loadMeals(true)}
+            tintColor={colors.primary}
+          />
+        }
+      >
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>History</Text>
-            <Text style={styles.subtitle}>
-              Today&apos;s saved meals and nutrition summary.
-            </Text>
+            <Text style={styles.subtitle}>Your saved meals from Supabase.</Text>
           </View>
         </View>
 
-        <View style={styles.summaryCard}>
-          <Text style={styles.cardLabel}>Today&apos;s Summary</Text>
-
-          <View style={styles.bigMetric}>
-            <Text style={styles.bigNumber}>{totals.calories.toLocaleString()}</Text>
-            <Text style={styles.bigUnit}>kcal</Text>
-          </View>
-
-          <Text style={styles.summaryMeta}>
-            {calorieProgress}% of {targets.calories.toLocaleString()} kcal target
-          </Text>
-
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${calorieProgress}%` }]} />
-          </View>
-
-          <View style={styles.statusRow}>
-            <View style={styles.statusPill}>
-              <Text style={styles.statusLabel}>Calories</Text>
-              <Text style={styles.statusValue}>{calorieStatus}</Text>
-            </View>
-
-            <View style={styles.statusPill}>
-              <Text style={styles.statusLabel}>Protein</Text>
-              <Text style={styles.statusValue}>{proteinStatus}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Macro Summary</Text>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Protein</Text>
-            <Text style={styles.rowValue}>
-              {totals.protein}g / {targets.protein}g
-            </Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Carbs</Text>
-            <Text style={styles.rowValue}>
-              {totals.carbs}g / {targets.carbs}g
-            </Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Fat</Text>
-            <Text style={styles.rowValue}>
-              {totals.fat}g / {targets.fat}g
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Tracking Stats</Text>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Goal</Text>
-            <Text style={styles.rowValue}>{profile.goal}</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Meals logged</Text>
-            <Text style={styles.rowValue}>{meals.length}</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Average per meal</Text>
-            <Text style={styles.rowValue}>{averageCalories.toLocaleString()} kcal</Text>
-          </View>
-        </View>
-
-        <View style={styles.mealsHeader}>
-          <Text style={styles.sectionTitle}>Meals Logged</Text>
-          <Text style={styles.mealCount}>
-            {meals.length === 1 ? "1 meal" : `${meals.length} meals`}
-          </Text>
+        <View style={styles.statusCard}>
+          <Text style={styles.statusLabel}>Cloud History</Text>
+          <Text style={styles.statusText}>{statusMessage}</Text>
         </View>
 
         {meals.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No meals saved yet.</Text>
+            <Text style={styles.emptyTitle}>No cloud meals yet</Text>
             <Text style={styles.emptyText}>
-              Add a meal from the Scan tab and it will appear here.
+              Save a meal while signed in and it will appear here.
             </Text>
           </View>
         ) : (
-          meals.map((meal) => (
-            <View key={meal.id} style={styles.mealCard}>
-              <View>
-                <Text style={styles.mealTime}>{meal.time}</Text>
-                <Text style={styles.mealName}>{meal.name}</Text>
-                <Text style={styles.mealMeta}>
-                  {meal.calories.toLocaleString()} kcal · {meal.protein}g protein ·{" "}
-                  {meal.confidence} confidence
-                </Text>
-              </View>
+          groupLabels.map((label) => (
+            <View key={label} style={styles.daySection}>
+              <Text style={styles.dayTitle}>{label}</Text>
+
+              {groupedMeals[label].map((meal) => (
+                <View key={meal.id} style={styles.mealCard}>
+                  <View style={styles.mealTopRow}>
+                    <View style={styles.mealTextWrap}>
+                      <Text style={styles.mealTime}>
+                        {formatMealTime(meal.meal_time)}
+                      </Text>
+                      <Text style={styles.mealName}>{meal.meal_name}</Text>
+                      <Text style={styles.mealMeta}>
+                        {meal.confidence} confidence
+                        {meal.source ? ` • ${meal.source}` : ""}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => handleDeleteMeal(meal)}
+                    >
+                      <Text style={styles.deleteText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.macroGrid}>
+                    <View style={styles.macroBox}>
+                      <Text style={styles.macroValue}>{meal.calories}</Text>
+                      <Text style={styles.macroLabel}>kcal</Text>
+                    </View>
+
+                    <View style={styles.macroBox}>
+                      <Text style={styles.macroValue}>{meal.protein_g}g</Text>
+                      <Text style={styles.macroLabel}>protein</Text>
+                    </View>
+
+                    <View style={styles.macroBox}>
+                      <Text style={styles.macroValue}>{meal.carbs_g}g</Text>
+                      <Text style={styles.macroLabel}>carbs</Text>
+                    </View>
+
+                    <View style={styles.macroBox}>
+                      <Text style={styles.macroValue}>{meal.fat_g}g</Text>
+                      <Text style={styles.macroLabel}>fat</Text>
+                    </View>
+                  </View>
+
+                  {meal.notes ? (
+                    <Text style={styles.notesText}>{meal.notes}</Text>
+                  ) : null}
+                </View>
+              ))}
             </View>
           ))
         )}
@@ -209,23 +232,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: {
-    color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: "800",
-  },
   container: {
     padding: spacing.screen,
     paddingBottom: spacing.bottomSafe,
   },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.screen,
+  },
+  loadingText: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 14,
+  },
   header: {
     marginTop: 12,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   title: {
     color: colors.textPrimary,
@@ -238,154 +263,75 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontWeight: "600",
   },
-  summaryCard: {
-    backgroundColor: colors.cardAlt,
-    borderRadius: radius.xxl,
-    padding: spacing.cardLarge,
-    marginBottom: 18,
+  statusCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing.card,
     borderWidth: 1,
-    borderColor: colors.borderViolet,
+    borderColor: colors.border,
+    marginBottom: 18,
   },
-  cardLabel: {
+  statusLabel: {
     color: colors.secondary,
     fontSize: 13,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
+    marginBottom: 8,
   },
-  bigMetric: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    marginTop: 10,
-  },
-  bigNumber: {
-    color: colors.textPrimary,
-    fontSize: 58,
-    fontWeight: "900",
-  },
-  bigUnit: {
-    color: colors.textSecondary,
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 10,
-    marginLeft: 8,
-  },
-  summaryMeta: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: 8,
-  },
-  progressTrack: {
-    height: 12,
-    backgroundColor: colors.border,
-    borderRadius: radius.pill,
-    marginTop: 16,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-  },
-  statusRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 18,
-  },
-  statusPill: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: radius.large,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  statusLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    marginBottom: 6,
-  },
-  statusValue: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    padding: spacing.card,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sectionTitle: {
-    color: colors.textPrimary,
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  row: {
-    marginTop: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 14,
-  },
-  rowLabel: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  rowValue: {
+  statusText: {
     color: colors.textPrimary,
     fontSize: 15,
-    fontWeight: "900",
-    textAlign: "right",
-    flexShrink: 1,
-  },
-  mealsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  mealCount: {
-    color: colors.textSecondary,
-    fontSize: 14,
     fontWeight: "700",
+    lineHeight: 22,
   },
   emptyCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.large,
-    padding: 20,
+    backgroundColor: colors.cardAlt,
+    borderRadius: radius.xxl,
+    padding: spacing.cardLarge,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderViolet,
   },
   emptyTitle: {
     color: colors.textPrimary,
-    fontSize: 17,
+    fontSize: 24,
     fontWeight: "900",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   emptyText: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
-    lineHeight: 20,
+    lineHeight: 22,
+  },
+  daySection: {
+    marginBottom: 22,
+  },
+  dayTitle: {
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 12,
   },
   mealCard: {
     backgroundColor: colors.card,
-    borderRadius: radius.large,
-    padding: 18,
+    borderRadius: radius.xl,
+    padding: spacing.card,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 12,
   },
+  mealTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  mealTextWrap: {
+    flex: 1,
+  },
   mealTime: {
     color: colors.secondary,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "900",
     marginBottom: 6,
   },
@@ -393,12 +339,62 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 18,
     fontWeight: "900",
-    marginBottom: 6,
+    marginBottom: 5,
   },
   mealMeta: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  deleteButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 107, 107, 0.14)",
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  deleteText: {
+    color: colors.danger,
+    fontSize: 22,
+    fontWeight: "800",
+    marginTop: -2,
+  },
+  macroGrid: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 16,
+  },
+  macroBox: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderRadius: radius.medium,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  macroValue: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+    marginBottom: 3,
+  },
+  macroLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  notesText: {
+    color: colors.textSecondary,
+    fontSize: 13,
     fontWeight: "600",
-    lineHeight: 20,
+    lineHeight: 19,
+    marginTop: 12,
   },
 });

@@ -12,6 +12,22 @@ export type CloudMealInput = {
   imageUrl?: string;
 };
 
+export type CloudMeal = {
+  id: string;
+  user_id: string;
+  meal_name: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  confidence: string;
+  source: string | null;
+  meal_time: string;
+  image_url: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
 export async function getCurrentUserId() {
   const { data, error } = await supabase.auth.getUser();
 
@@ -63,5 +79,66 @@ export async function saveMealToCloud(input: CloudMealInput) {
     ok: true,
     message: "Meal saved to cloud.",
     mealId: data.id as string,
+  };
+}
+
+export async function loadCloudMeals() {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return {
+      ok: false,
+      message: "Sign in to view cloud meal history.",
+      meals: [] as CloudMeal[],
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("meals")
+    .select("*")
+    .eq("user_id", userId)
+    .order("meal_time", { ascending: false });
+
+  if (error) {
+    return {
+      ok: false,
+      message: error.message,
+      meals: [] as CloudMeal[],
+    };
+  }
+
+  return {
+    ok: true,
+    message: "Cloud meals loaded.",
+    meals: (data || []) as CloudMeal[],
+  };
+}
+
+export async function deleteCloudMeal(mealId: string) {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return {
+      ok: false,
+      message: "Sign in to delete cloud meals.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("meals")
+    .delete()
+    .eq("id", mealId)
+    .eq("user_id", userId);
+
+  if (error) {
+    return {
+      ok: false,
+      message: error.message,
+    };
+  }
+
+  return {
+    ok: true,
+    message: "Meal deleted.",
   };
 }
