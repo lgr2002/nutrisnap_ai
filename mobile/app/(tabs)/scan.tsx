@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActionSheetIOS,
   Image,
@@ -14,11 +14,39 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { colors, radius, spacing } from "@/src/theme";
+import {
+  getFreeDailyScanLimit,
+  incrementTodayScanCount,
+  loadTodayScanCount,
+} from "@/src/storage/scanUsageStorage";
+import { getPremiumStatus } from "@/src/storage/subscriptionStorage";
 
 export default function ScanMealScreen() {
   const [description, setDescription] = useState("");
   const [optionalDetails, setOptionalDetails] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
+
+  const [isPremium, setIsPremium] = useState(false);
+  const [scanCount, setScanCount] = useState(0);
+  const [isLoadingUsage, setIsLoadingUsage] = useState(true);
+
+  const freeLimit = getFreeDailyScanLimit();
+  const scansRemaining = Math.max(freeLimit - scanCount, 0);
+
+  useEffect(() => {
+    const loadUsage = async () => {
+      const [premiumStatus, todayCount] = await Promise.all([
+        getPremiumStatus(),
+        loadTodayScanCount(),
+      ]);
+
+      setIsPremium(premiumStatus);
+      setScanCount(todayCount);
+      setIsLoadingUsage(false);
+    };
+
+    loadUsage();
+  }, []);
 
   const chooseFromLibrary = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -88,8 +116,20 @@ export default function ScanMealScreen() {
     chooseFromLibrary();
   };
 
-  const handleEstimateMeal = () => {
+  const handleEstimateMeal = async () => {
+    const canUseFreeScan = scanCount < freeLimit;
+
+    if (!isPremium && !canUseFreeScan) {
+      router.push("/paywall");
+      return;
+    }
+
     const mealDescription = description.trim() || "Unknown meal";
+
+    if (!isPremium) {
+      const nextCount = await incrementTodayScanCount();
+      setScanCount(nextCount);
+    }
 
     router.push({
       pathname: "/result",
@@ -103,6 +143,16 @@ export default function ScanMealScreen() {
 
   const canEstimate = description.trim().length > 0 || !!imageUri;
 
+  if (isLoadingUsage) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading scan limits...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -112,12 +162,28 @@ export default function ScanMealScreen() {
             <Text style={styles.subtitle}>Scan or describe what you ate.</Text>
           </View>
 
-          <TouchableOpacity
-            style={styles.closeCircle}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={styles.closeCircle} onPress={() => router.back()}>
             <Text style={styles.closeText}>×</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.limitCard}>
+          <View>
+            <Text style={styles.limitLabel}>
+              {isPremium ? "Premium active" : "Free plan"}
+            </Text>
+            <Text style={styles.limitText}>
+              {isPremium
+                ? "Unlimited AI scans available."
+                : `${scansRemaining} of ${freeLimit} free scans remaining today.`}
+            </Text>
+          </View>
+
+          {!isPremium ? (
+            <TouchableOpacity style={styles.upgradeMiniButton} onPress={() => router.push("/paywall")}>
+              <Text style={styles.upgradeMiniText}>Upgrade</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <TouchableOpacity style={styles.uploadBox} onPress={handlePhotoPress}>
@@ -191,14 +257,13 @@ export default function ScanMealScreen() {
         </View>
 
         <TouchableOpacity
-          style={[
-            styles.estimateButton,
-            !canEstimate && styles.disabledButton,
-          ]}
+          style={[styles.estimateButton, !canEstimate && styles.disabledButton]}
           onPress={handleEstimateMeal}
           disabled={!canEstimate}
         >
-          <Text style={styles.estimateButtonText}>Estimate Meal</Text>
+          <Text style={styles.estimateButtonText}>
+            {!isPremium && scansRemaining === 0 ? "Unlock More Scans" : "Estimate Meal"}
+          </Text>
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
@@ -221,13 +286,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "800",
+  },
   container: {
     padding: spacing.screen,
     paddingBottom: spacing.bottomSafe,
   },
   header: {
     marginTop: 12,
-    marginBottom: 24,
+    marginBottom: 18,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -257,6 +332,43 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 26,
     marginTop: -2,
+  },
+  limitCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 18,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  limitLabel: {
+    color: colors.secondary,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 5,
+  },
+  limitText: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 21,
+  },
+  upgradeMiniButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  upgradeMiniText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: "900",
   },
   uploadBox: {
     height: 230,
