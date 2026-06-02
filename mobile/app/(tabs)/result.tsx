@@ -24,8 +24,29 @@ type ResultEstimate = {
   calorieRange: string;
   confidence: string;
   explanation: string;
-  source: "Backend" | "Local fallback" | "Edited";
+  source: string;
 };
+
+function formatEstimateSource(source?: string) {
+  if (!source) {
+    return "Backend";
+  }
+
+  if (source.startsWith("openai:")) {
+    const modelName = source.replace("openai:", "");
+    return `OpenAI · ${modelName}`;
+  }
+
+  if (source === "openai") {
+    return "OpenAI";
+  }
+
+  if (source === "rule_fallback") {
+    return "Backend fallback";
+  }
+
+  return source;
+}
 
 export default function MealResultScreen() {
   const params = useLocalSearchParams<{
@@ -39,6 +60,7 @@ export default function MealResultScreen() {
     calorieRange?: string;
     confidence?: string;
     explanation?: string;
+    source?: string;
   }>();
 
   const mealName = params.mealName || "Unknown meal";
@@ -72,7 +94,7 @@ export default function MealResultScreen() {
           explanation:
             params.explanation ||
             "This estimate was manually edited by the user.",
-          source: "Edited",
+          source: params.source || "Edited",
         });
 
         setIsLoading(false);
@@ -96,7 +118,7 @@ export default function MealResultScreen() {
           calorieRange: backendEstimate.calorie_range,
           confidence: backendEstimate.confidence,
           explanation: backendEstimate.explanation,
-          source: "Backend",
+          source: formatEstimateSource(backendEstimate.source),
         });
       } catch (error) {
         const localEstimate = estimateMealFromDescription(combinedDescription);
@@ -133,6 +155,7 @@ export default function MealResultScreen() {
     params.calorieRange,
     params.confidence,
     params.explanation,
+    params.source,
   ]);
 
   const handleEditEstimate = () => {
@@ -153,6 +176,7 @@ export default function MealResultScreen() {
         calorieRange: estimate.calorieRange,
         confidence: estimate.confidence,
         explanation: estimate.explanation,
+        source: estimate.source,
       },
     });
   };
@@ -250,7 +274,9 @@ export default function MealResultScreen() {
 
           <View style={styles.badgeRow}>
             <View style={styles.rangeBadge}>
-              <Text style={styles.badgeText}>Range: {estimate.calorieRange}</Text>
+              <Text style={styles.badgeText}>
+                Range: {estimate.calorieRange}
+              </Text>
             </View>
 
             <View style={styles.confidenceBadge}>
@@ -283,8 +309,8 @@ export default function MealResultScreen() {
         <View style={styles.explanationCard}>
           <Text style={styles.explanationLabel}>Why this estimate?</Text>
           <Text style={styles.explanationText}>
-            {imageUri && estimate.source === "Backend"
-              ? `${estimate.explanation} A photo was attached, but image analysis will be added in the next AI backend stage.`
+            {imageUri && estimate.source.startsWith("OpenAI")
+              ? `${estimate.explanation} A photo was attached, but real image analysis will be added in the next AI backend stage.`
               : estimate.explanation}
           </Text>
         </View>
