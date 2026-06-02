@@ -1,7 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Image,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -17,6 +19,7 @@ import {
   estimateMealWithBackend,
 } from "@/src/api/mealApi";
 import { API_CONFIG_LABEL } from "@/src/api/config";
+import { saveMealToCloud } from "@/src/api/mealCloudApi";
 
 type ResultEstimate = {
   calories: number;
@@ -30,6 +33,15 @@ type ResultEstimate = {
   modeLabel: string;
   modeDescription: string;
 };
+
+function showMessage(title: string, message: string) {
+  if (Platform.OS === "web") {
+    alert(`${title}\n\n${message}`);
+    return;
+  }
+
+  Alert.alert(title, message);
+}
 
 function formatEstimateSource(source?: string) {
   if (!source) {
@@ -144,7 +156,9 @@ export default function MealResultScreen() {
 
   const [estimate, setEstimate] = useState<ResultEstimate | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingMeal, setIsSavingMeal] = useState(false);
   const [backendError, setBackendError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
   const [loadingHint, setLoadingHint] = useState(
     imageUri
       ? "Preparing your photo for AI analysis..."
@@ -309,23 +323,74 @@ export default function MealResultScreen() {
     });
   };
 
-  const handleSaveMeal = () => {
-    if (!estimate) {
+  const handleSaveMeal = async () => {
+    if (!estimate || isSavingMeal) {
       return;
     }
 
-    router.push({
-      pathname: "/",
-      params: {
-        savedMealId: Date.now().toString(),
-        savedMealName: mealName,
-        savedMealCalories: estimate.calories.toString(),
-        savedMealProtein: estimate.protein.toString(),
-        savedMealCarbs: estimate.carbs.toString(),
-        savedMealFat: estimate.fat.toString(),
-        savedMealConfidence: estimate.confidence,
-      },
-    });
+    setIsSavingMeal(true);
+    setSaveMessage("");
+
+    try {
+      const cloudResult = await saveMealToCloud({
+        mealName,
+        calories: estimate.calories,
+        proteinG: estimate.protein,
+        carbsG: estimate.carbs,
+        fatG: estimate.fat,
+        confidence: estimate.confidence,
+        source: estimate.source,
+        notes: optionalDetails,
+      });
+
+      if (cloudResult.ok) {
+        setSaveMessage("Saved to cloud.");
+      } else {
+        setSaveMessage(cloudResult.message);
+      }
+
+      router.push({
+        pathname: "/",
+        params: {
+          savedMealId: cloudResult.mealId || Date.now().toString(),
+          savedMealName: mealName,
+          savedMealCalories: estimate.calories.toString(),
+          savedMealProtein: estimate.protein.toString(),
+          savedMealCarbs: estimate.carbs.toString(),
+          savedMealFat: estimate.fat.toString(),
+          savedMealConfidence: estimate.confidence,
+          cloudSaveStatus: cloudResult.ok ? "saved" : "local-only",
+        },
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Meal could not be saved to cloud.";
+
+      setSaveMessage(message);
+
+      showMessage(
+        "Cloud save failed",
+        "The meal will still be added locally for this demo."
+      );
+
+      router.push({
+        pathname: "/",
+        params: {
+          savedMealId: Date.now().toString(),
+          savedMealName: mealName,
+          savedMealCalories: estimate.calories.toString(),
+          savedMealProtein: estimate.protein.toString(),
+          savedMealCarbs: estimate.carbs.toString(),
+          savedMealFat: estimate.fat.toString(),
+          savedMealConfidence: estimate.confidence,
+          cloudSaveStatus: "failed",
+        },
+      });
+    } finally {
+      setIsSavingMeal(false);
+    }
   };
 
   if (isLoading || !estimate) {
@@ -367,6 +432,12 @@ export default function MealResultScreen() {
           <View style={styles.errorCard}>
             <Text style={styles.errorLabel}>Estimate warning</Text>
             <Text style={styles.errorText}>{backendError}</Text>
+          </View>
+        ) : null}
+
+        {saveMessage ? (
+          <View style={styles.saveMessageCard}>
+            <Text style={styles.saveMessageText}>{saveMessage}</Text>
           </View>
         ) : null}
 
@@ -443,16 +514,26 @@ export default function MealResultScreen() {
           <Text style={styles.explanationText}>{estimate.explanation}</Text>
         </View>
 
-        <TouchableOpacity style={styles.editButton} onPress={handleEditEstimate}>
+        <TouchableOpacity
+          style={[styles.editButton, isSavingMeal && styles.disabledButton]}
+          onPress={handleEditEstimate}
+          disabled={isSavingMeal}
+        >
           <Text style={styles.editButtonText}>Edit Estimate</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.saveButton} onPress={handleSaveMeal}>
-          <Text style={styles.saveButtonText}>Save to Today</Text>
+        <TouchableOpacity
+          style={[styles.saveButton, isSavingMeal && styles.disabledButton]}
+          onPress={handleSaveMeal}
+          disabled={isSavingMeal}
+        >
+          <Text style={styles.saveButtonText}>
+            {isSavingMeal ? "Saving..." : "Save to Today"}
+          </Text>
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          AI estimates are approximate. You can adjust this later.
+          AI estimates are approximate. Signed-in users save meals to Supabase cloud.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -535,6 +616,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     lineHeight: 20,
+  },
+  saveMessageCard: {
+    backgroundColor: "rgba(0, 214, 167, 0.12)",
+    borderRadius: radius.large,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.secondary,
+    marginBottom: 16,
+  },
+  saveMessageText: {
+    color: colors.secondary,
+    fontSize: 14,
+    fontWeight: "900",
   },
   imageCard: {
     height: 230,
@@ -707,6 +801,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveButtonText: { color: colors.textPrimary, fontSize: 18, fontWeight: "900" },
+  disabledButton: {
+    opacity: 0.55,
+  },
   disclaimer: {
     color: colors.textSecondary,
     textAlign: "center",
