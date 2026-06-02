@@ -21,15 +21,22 @@ import {
   SavedUserProfile,
 } from "@/src/storage/userProfileStorage";
 import { API_BASE_URL, API_CONFIG_LABEL, API_ENV } from "@/src/api/config";
-import { checkSupabaseConnection } from "@/src/api/supabaseClient";
+import { checkSupabaseConnection, supabase } from "@/src/api/supabaseClient";
 import {
   resetPremiumStatus,
   getPremiumStatus,
 } from "@/src/storage/subscriptionStorage";
 import { resetTodayScanCount } from "@/src/storage/scanUsageStorage";
+import {
+  clearAuthEmail,
+  loadAuthEmail,
+  saveAuthEmail,
+} from "@/src/storage/authStorage";
 
 export default function ProfileScreen() {
   const [isPremium, setIsPremium] = useState(false);
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   const [supabaseStatus, setSupabaseStatus] = useState({
     ok: false,
@@ -61,6 +68,14 @@ export default function ProfileScreen() {
       const savedProfile = await loadUserProfile();
       const savedTargets = await loadNutritionTargets();
       const premiumStatus = await getPremiumStatus();
+      const localAuthEmail = await loadAuthEmail();
+
+      const { data } = await supabase.auth.getSession();
+      const sessionEmail = data.session?.user.email || null;
+
+      if (sessionEmail) {
+        await saveAuthEmail(sessionEmail);
+      }
 
       if (savedProfile) {
         setProfile(savedProfile);
@@ -71,9 +86,12 @@ export default function ProfileScreen() {
       }
 
       setIsPremium(premiumStatus);
+      setAuthEmail(sessionEmail || localAuthEmail);
 
       const connectionStatus = await checkSupabaseConnection();
       setSupabaseStatus(connectionStatus);
+
+      setIsCheckingAuth(false);
     };
 
     loadProfileData();
@@ -92,6 +110,16 @@ export default function ProfileScreen() {
 
     if (Platform.OS !== "web") {
       Alert.alert("Demo reset", "Premium status and scan count were reset.");
+    }
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    await clearAuthEmail();
+    setAuthEmail(null);
+
+    if (Platform.OS !== "web") {
+      Alert.alert("Signed out", "You have been signed out.");
     }
   };
 
@@ -141,6 +169,30 @@ export default function ProfileScreen() {
     );
   };
 
+  const confirmSignOut = () => {
+    if (Platform.OS === "web") {
+      signOut();
+      return;
+    }
+
+    Alert.alert("Log out?", "You will be signed out of cloud sync.", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: signOut,
+      },
+    ]);
+  };
+
+  const authTitle = authEmail ? "Cloud Account" : "Cloud Sync";
+  const authText = authEmail
+    ? `Signed in as ${authEmail}. Cloud meal sync will be enabled in the next batch.`
+    : "Sign in to prepare your meals and profile for cloud sync.";
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -153,6 +205,29 @@ export default function ProfileScreen() {
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarText}>{profile.name.charAt(0)}</Text>
           </View>
+        </View>
+
+        <View style={styles.authCard}>
+          <Text style={styles.authLabel}>{authTitle}</Text>
+          <Text style={styles.authTitle}>
+            {authEmail ? "Signed in" : "Not signed in"}
+          </Text>
+          <Text style={styles.authText}>
+            {isCheckingAuth ? "Checking account..." : authText}
+          </Text>
+
+          {authEmail ? (
+            <TouchableOpacity style={styles.secondarySmallButton} onPress={confirmSignOut}>
+              <Text style={styles.secondarySmallButtonText}>Log Out</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.authButton}
+              onPress={() => router.push("/auth")}
+            >
+              <Text style={styles.authButtonText}>Sign In / Sign Up</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.planCard}>
@@ -257,10 +332,10 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Cloud Sync</Text>
+          <Text style={styles.sectionTitle}>Supabase Status</Text>
 
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Supabase</Text>
+            <Text style={styles.rowLabel}>Client</Text>
             <Text style={styles.rowValue}>
               {supabaseStatus.ok ? "Connected" : "Not connected"}
             </Text>
@@ -308,8 +383,10 @@ export default function ProfileScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.logoutButton}>
-          <Text style={styles.logoutButtonText}>Log Out</Text>
+        <TouchableOpacity style={styles.logoutButton} onPress={confirmSignOut}>
+          <Text style={styles.logoutButtonText}>
+            {authEmail ? "Log Out" : "Log Out"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -354,6 +431,59 @@ const styles = StyleSheet.create({
   avatarText: {
     color: colors.textPrimary,
     fontSize: 24,
+    fontWeight: "900",
+  },
+  authCard: {
+    backgroundColor: colors.cardAlt,
+    borderRadius: radius.xxl,
+    padding: spacing.cardLarge,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: colors.borderViolet,
+  },
+  authLabel: {
+    color: colors.secondary,
+    fontSize: 13,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  authTitle: {
+    color: colors.textPrimary,
+    fontSize: 26,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
+  authText: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 22,
+    marginBottom: 18,
+  },
+  authButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingVertical: 15,
+    alignItems: "center",
+  },
+  authButtonText: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  secondarySmallButton: {
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  secondarySmallButtonText: {
+    color: colors.textPrimary,
+    fontSize: 15,
     fontWeight: "900",
   },
   planCard: {

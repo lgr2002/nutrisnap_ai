@@ -1,4 +1,4 @@
-export const SUPABASE_URL = "https://dydhxjjvsxexalzojjih.supabase.co";
+export const SUPABASE_URL = "https://dydhxjivsxexalzojiih.supabase.co";
 
 export const SUPABASE_ANON_KEY =
   "sb_publishable_zbk6Q-cbgN1B_MQiOSwr-Q_nnmKfvAR";
