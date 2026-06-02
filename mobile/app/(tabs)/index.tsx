@@ -13,6 +13,12 @@ import {
 import { colors, radius, spacing } from "@/src/theme";
 import { mockMeals, mockTargets, mockToday, mockUser } from "@/src/data/mockData";
 import {
+  loadNutritionTargets,
+  loadUserProfile,
+  SavedNutritionTargets,
+  SavedUserProfile,
+} from "@/src/storage/userProfileStorage";
+import {
   clearMealsFromStorage,
   loadMealsFromStorage,
   saveMealsToStorage,
@@ -34,11 +40,34 @@ export default function HomeScreen() {
 
   const [meals, setMeals] = useState<Meal[]>([]);
   const [hasLoadedMeals, setHasLoadedMeals] = useState(false);
+
+  const [profile, setProfile] = useState<SavedUserProfile>({
+    name: mockUser.name,
+    goal: mockUser.goal,
+    age: mockUser.age,
+    heightCm: mockUser.heightCm,
+    weightKg: mockUser.weightKg,
+    sex: "Male",
+    activityLevel: mockUser.activityLevel,
+    units: mockUser.units,
+    diet: mockUser.diet,
+    theme: mockUser.theme,
+  });
+
+  const [targets, setTargets] = useState<SavedNutritionTargets>({
+    calories: mockTargets.calories,
+    protein: mockTargets.protein,
+    carbs: mockTargets.carbs,
+    fat: mockTargets.fat,
+  });
+
   const lastSavedMealId = useRef<string | null>(null);
 
   useEffect(() => {
-    const loadSavedMeals = async () => {
+    const loadDashboardData = async () => {
       const savedMeals = await loadMealsFromStorage();
+      const savedProfile = await loadUserProfile();
+      const savedTargets = await loadNutritionTargets();
 
       if (savedMeals) {
         setMeals(savedMeals);
@@ -47,10 +76,18 @@ export default function HomeScreen() {
         await saveMealsToStorage(mockMeals);
       }
 
+      if (savedProfile) {
+        setProfile(savedProfile);
+      }
+
+      if (savedTargets) {
+        setTargets(savedTargets);
+      }
+
       setHasLoadedMeals(true);
     };
 
-    loadSavedMeals();
+    loadDashboardData();
   }, []);
 
   useEffect(() => {
@@ -181,14 +218,30 @@ export default function HomeScreen() {
   const totalProtein = meals.reduce((sum, meal) => sum + meal.protein, 0);
   const totalCarbs = meals.reduce((sum, meal) => sum + meal.carbs, 0);
   const totalFat = meals.reduce((sum, meal) => sum + meal.fat, 0);
-  const remainingCalories = Math.max(mockTargets.calories - totalCalories, 0);
+
+  const remainingCalories = Math.max(targets.calories - totalCalories, 0);
 
   const calorieProgress = `${Math.min(
-    Math.round((totalCalories / mockTargets.calories) * 100),
+    Math.round((totalCalories / targets.calories) * 100),
     100
   )}%`;
 
   const mealCountLabel = meals.length === 1 ? "1 meal" : `${meals.length} meals`;
+
+  const proteinProgressText = `${totalProtein}g / ${targets.protein}g`;
+
+  let insightText = "Protein is decent today. Add fibre or fruit later to balance the day.";
+
+  if (totalCalories > targets.calories) {
+    insightText =
+      "You are over your calorie target today. Keep the next meal lighter and focus on protein/fibre.";
+  } else if (totalProtein >= targets.protein) {
+    insightText =
+      "Protein target is looking strong today. Keep the next meal lighter if calories are high.";
+  } else if (totalProtein < targets.protein * 0.5) {
+    insightText =
+      "Protein is still low for your target. A lean protein meal would help balance the day.";
+  }
 
   if (!hasLoadedMeals) {
     return (
@@ -205,13 +258,19 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good evening, {mockUser.name}</Text>
+            <Text style={styles.greeting}>Good evening, {profile.name}</Text>
             <Text style={styles.date}>{mockToday.dateLabel}</Text>
           </View>
 
           <View style={styles.notificationCircle}>
             <Text style={styles.notificationDot}>●</Text>
           </View>
+        </View>
+
+        <View style={styles.goalCard}>
+          <Text style={styles.goalLabel}>Current Goal</Text>
+          <Text style={styles.goalText}>{profile.goal}</Text>
+          <Text style={styles.goalMeta}>{profile.activityLevel}</Text>
         </View>
 
         <View style={styles.energyCard}>
@@ -221,7 +280,7 @@ export default function HomeScreen() {
 
           <View style={styles.energyRow}>
             <Text style={styles.metaText}>
-              Goal: {mockTargets.calories.toLocaleString()} kcal
+              Goal: {targets.calories.toLocaleString()} kcal
             </Text>
             <Text style={styles.metaText}>
               Remaining: {remainingCalories.toLocaleString()} kcal
@@ -238,29 +297,27 @@ export default function HomeScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Protein</Text>
-            <Text style={styles.rowValue}>
-              {totalProtein}g / {mockTargets.protein}g
-            </Text>
+            <Text style={styles.rowValue}>{proteinProgressText}</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Carbs</Text>
-            <Text style={styles.rowValue}>{totalCarbs}g</Text>
+            <Text style={styles.rowValue}>
+              {totalCarbs}g / {targets.carbs}g
+            </Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Fat</Text>
-            <Text style={styles.rowValue}>{totalFat}g</Text>
+            <Text style={styles.rowValue}>
+              {totalFat}g / {targets.fat}g
+            </Text>
           </View>
         </View>
 
         <View style={styles.insightCard}>
           <Text style={styles.insightLabel}>AI Insight</Text>
-          <Text style={styles.insightText}>
-            {totalProtein >= mockTargets.protein
-              ? "Protein target is looking strong today. Keep the next meal lighter if calories are high."
-              : "Protein is decent today. Add fibre or fruit later to balance the day."}
-          </Text>
+          <Text style={styles.insightText}>{insightText}</Text>
         </View>
 
         <View style={styles.mealsHeader}>
@@ -305,17 +362,11 @@ export default function HomeScreen() {
           <Text style={styles.scanButtonText}>+ Scan Meal</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.resetButton}
-          onPress={confirmResetDemoMeals}
-        >
+        <TouchableOpacity style={styles.resetButton} onPress={confirmResetDemoMeals}>
           <Text style={styles.resetButtonText}>Reset demo meals</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.clearButton}
-          onPress={confirmClearAllMeals}
-        >
+        <TouchableOpacity style={styles.clearButton} onPress={confirmClearAllMeals}>
           <Text style={styles.clearButtonText}>Clear all meals</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -344,7 +395,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginTop: 12,
-    marginBottom: 24,
+    marginBottom: 18,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -372,6 +423,33 @@ const styles = StyleSheet.create({
   notificationDot: {
     color: colors.secondary,
     fontSize: 18,
+  },
+  goalCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing.card,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  goalLabel: {
+    color: colors.secondary,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  goalText: {
+    color: colors.textPrimary,
+    fontSize: 21,
+    fontWeight: "900",
+  },
+  goalMeta: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "700",
+    marginTop: 6,
   },
   energyCard: {
     backgroundColor: colors.cardAlt,
