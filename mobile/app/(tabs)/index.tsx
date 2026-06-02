@@ -247,7 +247,11 @@ export default function HomeScreen() {
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good evening, {mockUser.name}</Text>
+            <Text style={styles.greeting}>
+  {cloudStatusMessage.toLowerCase().startsWith("sign in")
+    ? "Good evening"
+    : `Good evening, ${mockUser.name}`}
+</Text>
             <Text style={styles.dateText}>Today · {getTodayLabel()}</Text>
           </View>
 
@@ -312,7 +316,11 @@ export default function HomeScreen() {
 
         <View style={styles.cloudCard}>
           <Text style={styles.cloudLabel}>Cloud Sync</Text>
-          <Text style={styles.cloudText}>{cloudStatusMessage}</Text>
+          <Text style={styles.cloudText}>
+  {cloudStatusMessage.toLowerCase().startsWith("sign in")
+    ? "Sign in from Profile to sync meals across devices."
+    : cloudStatusMessage}
+</Text>
         </View>
 
         <View style={styles.mealsHeader}>
