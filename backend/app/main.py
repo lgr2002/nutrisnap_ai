@@ -44,12 +44,12 @@ def health_check():
     return {
         "status": "healthy",
         "version": "0.5.0",
+        "environment": os.getenv("APP_ENV", "development"),
         "use_openai": use_openai,
         "ai_mode": get_ai_mode(),
         "openai_model": get_openai_model_name(),
         "openai_key_loaded": has_api_key,
     }
-
 
 @app.post("/estimate-meal", response_model=MealEstimateResponse)
 def estimate_meal_endpoint(request: MealEstimateRequest):
