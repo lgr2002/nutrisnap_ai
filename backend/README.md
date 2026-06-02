@@ -9,6 +9,7 @@ FastAPI backend for NutriSnap AI meal estimation.
 - OpenAI text/vision meal estimation
 - Rule-based fallback estimator
 - AI mode control for cost management
+- Docker-ready deployment setup
 
 ## Local setup
 

@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from openai import OpenAI
 
@@ -16,31 +16,17 @@ MEAL_ESTIMATE_RESPONSE_FORMAT: Dict[str, Any] = {
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "meal_name": {
-                    "type": "string"
-                },
-                "calories": {
-                    "type": "integer"
-                },
-                "calorie_range": {
-                    "type": "string"
-                },
+                "meal_name": {"type": "string"},
+                "calories": {"type": "integer"},
+                "calorie_range": {"type": "string"},
                 "confidence": {
                     "type": "string",
-                    "enum": ["High", "Medium", "Low"]
+                    "enum": ["High", "Medium", "Low"],
                 },
-                "protein_g": {
-                    "type": "integer"
-                },
-                "carbs_g": {
-                    "type": "integer"
-                },
-                "fat_g": {
-                    "type": "integer"
-                },
-                "explanation": {
-                    "type": "string"
-                }
+                "protein_g": {"type": "integer"},
+                "carbs_g": {"type": "integer"},
+                "fat_g": {"type": "integer"},
+                "explanation": {"type": "string"},
             },
             "required": [
                 "meal_name",
@@ -50,10 +36,10 @@ MEAL_ESTIMATE_RESPONSE_FORMAT: Dict[str, Any] = {
                 "protein_g",
                 "carbs_g",
                 "fat_g",
-                "explanation"
-            ]
-        }
-    }
+                "explanation",
+            ],
+        },
+    },
 }
 
 
@@ -66,7 +52,13 @@ def _get_client() -> OpenAI:
     return OpenAI(api_key=api_key)
 
 
-def _build_prompt(request: MealEstimateRequest) -> str:
+def get_openai_model_name() -> str:
+    return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+
+def _build_text_prompt(request: MealEstimateRequest) -> str:
+    has_real_image = bool(request.image_base64)
+
     return f"""
 Estimate calories and macros for this meal.
 
@@ -79,35 +71,60 @@ Optional details:
 Portion:
 {request.portion or "Whole meal"}
 
-Image attached:
-{request.image_attached}
+Image provided:
+{has_real_image}
 
 Rules:
 - Estimate the amount the user likely ate, not a generic database serving.
+- Use the image if available, especially for visible portion size, toppings, rice amount, sauces, drinks, sides, and fried/oily foods.
 - Be realistic for takeaway/restaurant food where oil, sauce, cheese and portion size can increase calories.
-- If details are limited, use Medium or Low confidence and a wider calorie range.
+- If the image is unclear or details are limited, use Medium or Low confidence and a wider calorie range.
 - Keep explanation short and practical.
 - Return only valid JSON matching the required schema.
 """.strip()
 
 
+def _build_user_content(request: MealEstimateRequest) -> List[Dict[str, Any]]:
+    content: List[Dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": _build_text_prompt(request),
+        }
+    ]
+
+    if request.image_base64:
+        mime_type = request.image_mime_type or "image/jpeg"
+
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{mime_type};base64,{request.image_base64}"
+                },
+            }
+        )
+
+    return content
+
+
 def estimate_meal_with_openai(request: MealEstimateRequest) -> MealEstimateResponse:
     client = _get_client()
+    model_name = get_openai_model_name()
 
     completion = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model_name,
         messages=[
             {
                 "role": "system",
                 "content": (
                     "You are a careful nutrition estimation assistant. "
-                    "You estimate calories and macros from meal descriptions. "
+                    "You estimate calories and macros from meal descriptions and food images. "
                     "You are realistic about takeaway/restaurant food and uncertainty."
                 ),
             },
             {
                 "role": "user",
-                "content": _build_prompt(request),
+                "content": _build_user_content(request),
             },
         ],
         response_format=MEAL_ESTIMATE_RESPONSE_FORMAT,
@@ -120,6 +137,8 @@ def estimate_meal_with_openai(request: MealEstimateRequest) -> MealEstimateRespo
 
     parsed = json.loads(raw_text)
 
+    source_prefix = "openai_vision" if request.image_base64 else "openai"
+
     return MealEstimateResponse(
         meal_name=parsed["meal_name"],
         calories=int(parsed["calories"]),
@@ -129,5 +148,6 @@ def estimate_meal_with_openai(request: MealEstimateRequest) -> MealEstimateRespo
         carbs_g=int(parsed["carbs_g"]),
         fat_g=int(parsed["fat_g"]),
         explanation=str(parsed["explanation"]),
-        source="openai",
+        source=f"{source_prefix}:{model_name}",
+        ai_mode="vision" if request.image_base64 else "text",
     )

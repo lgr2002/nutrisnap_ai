@@ -4,11 +4,26 @@ from app.models import MealEstimateRequest, MealEstimateResponse
 from app.services.openai_meal_estimator import estimate_meal_with_openai
 
 
-def estimate_meal_with_rules(request: MealEstimateRequest) -> MealEstimateResponse:
+VALID_AI_MODES = {"fallback", "text", "vision"}
+
+
+def get_ai_mode() -> str:
+    mode = os.getenv("AI_MODE", "fallback").lower().strip()
+
+    if mode not in VALID_AI_MODES:
+        return "fallback"
+
+    return mode
+
+
+def estimate_meal_with_rules(
+    request: MealEstimateRequest,
+    ai_mode: str = "fallback",
+) -> MealEstimateResponse:
     """
     Rule-based fallback estimator.
 
-    Used when OpenAI is disabled, missing, or unavailable.
+    Used when OpenAI is disabled, missing, unavailable, or AI_MODE=fallback.
     """
 
     combined_text = f"{request.meal_name} {request.optional_details or ''}".lower()
@@ -27,6 +42,7 @@ def estimate_meal_with_rules(request: MealEstimateRequest) -> MealEstimateRespon
                 "meat toppings, sauce and crust. Assumes one whole medium pizza."
             ),
             source="rule_fallback",
+            ai_mode=ai_mode,
         )
 
     if "chicken" in combined_text and "rice" in combined_text:
@@ -43,6 +59,7 @@ def estimate_meal_with_rules(request: MealEstimateRequest) -> MealEstimateRespon
                 "sauce and cooking oil."
             ),
             source="rule_fallback",
+            ai_mode=ai_mode,
         )
 
     if "steak" in combined_text:
@@ -59,6 +76,7 @@ def estimate_meal_with_rules(request: MealEstimateRequest) -> MealEstimateRespon
                 "and cooking oil. Assumes a large steak portion."
             ),
             source="rule_fallback",
+            ai_mode=ai_mode,
         )
 
     if "salad" in combined_text:
@@ -75,6 +93,7 @@ def estimate_meal_with_rules(request: MealEstimateRequest) -> MealEstimateRespon
                 "nuts and oil."
             ),
             source="rule_fallback",
+            ai_mode=ai_mode,
         )
 
     if "protein shake" in combined_text or "shake" in combined_text:
@@ -91,6 +110,24 @@ def estimate_meal_with_rules(request: MealEstimateRequest) -> MealEstimateRespon
                 "powder amount and added ingredients."
             ),
             source="rule_fallback",
+            ai_mode=ai_mode,
+        )
+
+    if "monster" in combined_text or "energy drink" in combined_text:
+        return MealEstimateResponse(
+            meal_name=request.meal_name,
+            calories=10,
+            calorie_range="0-20",
+            confidence="Medium",
+            protein_g=0,
+            carbs_g=1,
+            fat_g=0,
+            explanation=(
+                "Fallback estimate: sugar-free energy drinks are usually very low calorie. "
+                "Regular versions can be much higher."
+            ),
+            source="rule_fallback",
+            ai_mode=ai_mode,
         )
 
     return MealEstimateResponse(
@@ -106,17 +143,32 @@ def estimate_meal_with_rules(request: MealEstimateRequest) -> MealEstimateRespon
             "generic estimate."
         ),
         source="rule_fallback",
+        ai_mode=ai_mode,
     )
 
 
 def estimate_meal(request: MealEstimateRequest) -> MealEstimateResponse:
     use_openai = os.getenv("USE_OPENAI", "false").lower() == "true"
+    ai_mode = get_ai_mode()
 
-    if not use_openai:
-        return estimate_meal_with_rules(request)
+    if not use_openai or ai_mode == "fallback":
+        return estimate_meal_with_rules(request, ai_mode="fallback")
+
+    request_for_openai = request
+
+    if ai_mode == "text":
+        request_for_openai = request.model_copy(
+            update={
+                "image_attached": bool(request.image_attached),
+                "image_base64": None,
+                "image_mime_type": None,
+            }
+        )
 
     try:
-        return estimate_meal_with_openai(request)
+        response = estimate_meal_with_openai(request_for_openai)
+        response.ai_mode = ai_mode
+        return response
     except Exception as error:
         print(f"OpenAI estimate failed. Falling back to rules. Error: {error}")
-        return estimate_meal_with_rules(request)
+        return estimate_meal_with_rules(request, ai_mode=ai_mode)

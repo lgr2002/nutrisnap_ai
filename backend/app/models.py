@@ -10,6 +10,8 @@ class MealEstimateRequest(BaseModel):
     optional_details: Optional[str] = ""
     portion: Optional[str] = "Whole meal"
     image_attached: bool = False
+    image_base64: Optional[str] = None
+    image_mime_type: Optional[str] = None
 
 
 class MealEstimateResponse(BaseModel):
@@ -22,3 +24,4 @@ class MealEstimateResponse(BaseModel):
     fat_g: int
     explanation: str
     source: str = "rule_fallback"
+    ai_mode: str = "fallback"

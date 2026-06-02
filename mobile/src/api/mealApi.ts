@@ -5,6 +5,8 @@ export type BackendMealEstimateRequest = {
   optional_details?: string;
   portion?: string;
   image_attached?: boolean;
+  image_base64?: string;
+  image_mime_type?: string;
 };
 
 export type BackendMealEstimateResponse = {
@@ -16,6 +18,7 @@ export type BackendMealEstimateResponse = {
   carbs_g: number;
   fat_g: number;
   explanation: string;
+  source?: string;
 };
 
 export async function estimateMealWithBackend(
