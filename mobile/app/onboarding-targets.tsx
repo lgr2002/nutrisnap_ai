@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
+import { markOnboardingCompleted } from "@/src/storage/onboardingStorage";
 
 function calculateTargets(goal: string, weightText: string) {
   const weight = Number(weightText || 72);
@@ -53,6 +54,11 @@ export default function OnboardingTargetsScreen() {
   const activity = params.activity || "Train 3–4 days/week";
   const targets = calculateTargets(goal, params.weight || "72");
 
+  const handleStartTracking = async () => {
+    await markOnboardingCompleted();
+    router.replace("/");
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.container}>
@@ -74,7 +80,9 @@ export default function OnboardingTargetsScreen() {
           <View style={styles.divider} />
 
           <View style={styles.bigMetric}>
-            <Text style={styles.bigNumber}>{targets.calories.toLocaleString()}</Text>
+            <Text style={styles.bigNumber}>
+              {targets.calories.toLocaleString()}
+            </Text>
             <Text style={styles.bigUnit}>kcal/day</Text>
           </View>
 
@@ -102,10 +110,7 @@ export default function OnboardingTargetsScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.startButton}
-          onPress={() => router.replace("/")}
-        >
+        <TouchableOpacity style={styles.startButton} onPress={handleStartTracking}>
           <Text style={styles.startButtonText}>Start Tracking</Text>
         </TouchableOpacity>
 

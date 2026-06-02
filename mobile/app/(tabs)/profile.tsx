@@ -1,4 +1,7 @@
+import { router } from "expo-router";
 import {
+  Alert,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -8,8 +11,37 @@ import {
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
 import { mockTargets, mockUser } from "@/src/data/mockData";
+import { resetOnboardingState } from "@/src/storage/onboardingStorage";
 
 export default function ProfileScreen() {
+  const restartOnboarding = async () => {
+    await resetOnboardingState();
+    router.replace("/welcome");
+  };
+
+  const confirmRestartOnboarding = () => {
+    if (Platform.OS === "web") {
+      restartOnboarding();
+      return;
+    }
+
+    Alert.alert(
+      "Restart onboarding?",
+      "This will show the welcome and setup flow again.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Restart",
+          style: "destructive",
+          onPress: restartOnboarding,
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -117,6 +149,13 @@ export default function ProfileScreen() {
 
         <TouchableOpacity style={styles.secondaryButton}>
           <Text style={styles.secondaryButtonText}>Edit Profile</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={confirmRestartOnboarding}
+        >
+          <Text style={styles.secondaryButtonText}>Restart Onboarding</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.logoutButton}>
