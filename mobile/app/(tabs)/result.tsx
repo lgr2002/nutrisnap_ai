@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Image,
   SafeAreaView,
@@ -16,6 +16,7 @@ import {
   BackendMealEstimateResponse,
   estimateMealWithBackend,
 } from "@/src/api/mealApi";
+import { API_CONFIG_LABEL } from "@/src/api/config";
 
 type ResultEstimate = {
   calories: number;
@@ -57,7 +58,7 @@ function getModeCopy(source: string) {
     return {
       modeLabel: "Photo AI used",
       modeDescription:
-        "The estimate used your meal photo and description. This is more useful for visible portions, drinks, sauces and sides, but costs more API credits.",
+        "The estimate used your meal photo and description. This helps with visible portions, drinks, sauces and sides, but uses more API credits.",
     };
   }
 
@@ -139,11 +140,36 @@ export default function MealResultScreen() {
   const imageUri = params.imageUri || "";
   const combinedDescription = `${mealName} ${optionalDetails}`.trim();
 
+  const hasLoadedRef = useRef(false);
+
   const [estimate, setEstimate] = useState<ResultEstimate | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [backendError, setBackendError] = useState("");
+  const [loadingHint, setLoadingHint] = useState(
+    imageUri
+      ? "Preparing your photo for AI analysis..."
+      : "Sending your meal description to the AI backend..."
+  );
 
   useEffect(() => {
+    if (hasLoadedRef.current) {
+      return;
+    }
+
+    hasLoadedRef.current = true;
+
+    const hintTimer = setTimeout(() => {
+      setLoadingHint(
+        "Still working. Free backend servers can take longer if they were asleep."
+      );
+    }, 8000);
+
+    const coldStartTimer = setTimeout(() => {
+      setLoadingHint(
+        "The production backend may be waking up. This can take 30–60 seconds on the free hosting plan."
+      );
+    }, 18000);
+
     const loadEstimate = async () => {
       setIsLoading(true);
       setBackendError("");
@@ -173,11 +199,19 @@ export default function MealResultScreen() {
         });
 
         setIsLoading(false);
+        clearTimeout(hintTimer);
+        clearTimeout(coldStartTimer);
         return;
       }
 
       try {
         const imageBase64 = imageUri ? await imageUriToBase64(imageUri) : null;
+
+        setLoadingHint(
+          imageBase64
+            ? "Photo ready. Asking AI to estimate calories and macros..."
+            : "Asking AI to estimate calories and macros..."
+        );
 
         const backendEstimate: BackendMealEstimateResponse =
           await estimateMealWithBackend({
@@ -208,7 +242,9 @@ export default function MealResultScreen() {
         const modeCopy = getModeCopy("Local fallback");
 
         setBackendError(
-          "Backend unavailable. Showing local placeholder estimate."
+          error instanceof Error
+            ? error.message
+            : "Backend unavailable. Showing local placeholder estimate."
         );
 
         setEstimate({
@@ -224,10 +260,17 @@ export default function MealResultScreen() {
         });
       } finally {
         setIsLoading(false);
+        clearTimeout(hintTimer);
+        clearTimeout(coldStartTimer);
       }
     };
 
     loadEstimate();
+
+    return () => {
+      clearTimeout(hintTimer);
+      clearTimeout(coldStartTimer);
+    };
   }, [
     mealName,
     optionalDetails,
@@ -296,15 +339,11 @@ export default function MealResultScreen() {
             <Text style={styles.loadingStep}>
               {imageUri ? "✓ Preparing photo for AI" : "✓ Text-only estimate"}
             </Text>
-            <Text style={styles.loadingStep}>✓ Checking backend AI</Text>
+            <Text style={styles.loadingStep}>✓ Connecting to {API_CONFIG_LABEL}</Text>
             <Text style={styles.loadingStep}>✓ Calculating calories and macros</Text>
           </View>
 
-          <Text style={styles.loadingText}>
-            {imageUri
-              ? "Photo AI can take longer and uses more API credits."
-              : "Text estimates are usually faster and cheaper."}
-          </Text>
+          <Text style={styles.loadingText}>{loadingHint}</Text>
         </View>
       </SafeAreaView>
     );
@@ -326,6 +365,7 @@ export default function MealResultScreen() {
 
         {backendError ? (
           <View style={styles.errorCard}>
+            <Text style={styles.errorLabel}>Estimate warning</Text>
             <Text style={styles.errorText}>{backendError}</Text>
           </View>
         ) : null}
@@ -445,8 +485,8 @@ const styles = StyleSheet.create({
   loadingText: {
     color: colors.textSecondary,
     fontSize: 14,
-    fontWeight: "600",
-    lineHeight: 20,
+    fontWeight: "700",
+    lineHeight: 21,
   },
   container: { padding: spacing.screen, paddingBottom: spacing.bottomSafe },
   header: {
@@ -482,8 +522,16 @@ const styles = StyleSheet.create({
     borderColor: colors.warning,
     marginBottom: 16,
   },
-  errorText: {
+  errorLabel: {
     color: colors.warning,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  errorText: {
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: "800",
     lineHeight: 20,
