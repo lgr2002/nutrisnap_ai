@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Platform,
@@ -12,10 +13,55 @@ import {
 import { colors, radius, spacing } from "@/src/theme";
 import { mockTargets, mockUser } from "@/src/data/mockData";
 import { resetOnboardingState } from "@/src/storage/onboardingStorage";
+import {
+  loadNutritionTargets,
+  loadUserProfile,
+  resetUserProfileAndTargets,
+  SavedNutritionTargets,
+  SavedUserProfile,
+} from "@/src/storage/userProfileStorage";
 
 export default function ProfileScreen() {
+  const [profile, setProfile] = useState<SavedUserProfile>({
+    name: mockUser.name,
+    goal: mockUser.goal,
+    age: mockUser.age,
+    heightCm: mockUser.heightCm,
+    weightKg: mockUser.weightKg,
+    sex: "Male",
+    activityLevel: mockUser.activityLevel,
+    units: mockUser.units,
+    diet: mockUser.diet,
+    theme: mockUser.theme,
+  });
+
+  const [targets, setTargets] = useState<SavedNutritionTargets>({
+    calories: mockTargets.calories,
+    protein: mockTargets.protein,
+    carbs: mockTargets.carbs,
+    fat: mockTargets.fat,
+  });
+
+  useEffect(() => {
+    const loadProfileData = async () => {
+      const savedProfile = await loadUserProfile();
+      const savedTargets = await loadNutritionTargets();
+
+      if (savedProfile) {
+        setProfile(savedProfile);
+      }
+
+      if (savedTargets) {
+        setTargets(savedTargets);
+      }
+    };
+
+    loadProfileData();
+  }, []);
+
   const restartOnboarding = async () => {
     await resetOnboardingState();
+    await resetUserProfileAndTargets();
     router.replace("/welcome");
   };
 
@@ -52,7 +98,7 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{mockUser.name.charAt(0)}</Text>
+            <Text style={styles.avatarText}>{profile.name.charAt(0)}</Text>
           </View>
         </View>
 
@@ -74,12 +120,12 @@ export default function ProfileScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Main goal</Text>
-            <Text style={styles.rowValue}>{mockUser.goal}</Text>
+            <Text style={styles.rowValue}>{profile.goal}</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Activity</Text>
-            <Text style={styles.rowValue}>{mockUser.activityLevel}</Text>
+            <Text style={styles.rowValue}>{profile.activityLevel}</Text>
           </View>
         </View>
 
@@ -89,23 +135,23 @@ export default function ProfileScreen() {
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Calories</Text>
             <Text style={styles.rowValue}>
-              {mockTargets.calories.toLocaleString()} kcal
+              {targets.calories.toLocaleString()} kcal
             </Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Protein</Text>
-            <Text style={styles.rowValue}>{mockTargets.protein} g</Text>
+            <Text style={styles.rowValue}>{targets.protein} g</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Carbs</Text>
-            <Text style={styles.rowValue}>{mockTargets.carbs} g</Text>
+            <Text style={styles.rowValue}>{targets.carbs} g</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Fat</Text>
-            <Text style={styles.rowValue}>{mockTargets.fat} g</Text>
+            <Text style={styles.rowValue}>{targets.fat} g</Text>
           </View>
         </View>
 
@@ -114,17 +160,22 @@ export default function ProfileScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Age</Text>
-            <Text style={styles.rowValue}>{mockUser.age}</Text>
+            <Text style={styles.rowValue}>{profile.age}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Sex</Text>
+            <Text style={styles.rowValue}>{profile.sex}</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Height</Text>
-            <Text style={styles.rowValue}>{mockUser.heightCm} cm</Text>
+            <Text style={styles.rowValue}>{profile.heightCm} cm</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Weight</Text>
-            <Text style={styles.rowValue}>{mockUser.weightKg} kg</Text>
+            <Text style={styles.rowValue}>{profile.weightKg} kg</Text>
           </View>
         </View>
 
@@ -133,17 +184,17 @@ export default function ProfileScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Units</Text>
-            <Text style={styles.rowValue}>{mockUser.units}</Text>
+            <Text style={styles.rowValue}>{profile.units}</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Diet</Text>
-            <Text style={styles.rowValue}>{mockUser.diet}</Text>
+            <Text style={styles.rowValue}>{profile.diet}</Text>
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Theme</Text>
-            <Text style={styles.rowValue}>{mockUser.theme}</Text>
+            <Text style={styles.rowValue}>{profile.theme}</Text>
           </View>
         </View>
 

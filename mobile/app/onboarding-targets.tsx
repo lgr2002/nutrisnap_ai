@@ -8,8 +8,12 @@ import {
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
 import { markOnboardingCompleted } from "@/src/storage/onboardingStorage";
+import {
+  saveNutritionTargets,
+  saveUserProfile,
+} from "@/src/storage/userProfileStorage";
 
-function calculateTargets(goal: string, weightText: string) {
+function calculateTargets(goal: string, weightText: string, activity: string) {
   const weight = Number(weightText || 72);
 
   let calories = 2350;
@@ -28,6 +32,14 @@ function calculateTargets(goal: string, weightText: string) {
 
   if (goal === "Body recomposition") {
     calories = 2350;
+  }
+
+  if (activity === "Mostly sitting") {
+    calories -= 150;
+  }
+
+  if (activity === "Very active") {
+    calories += 250;
   }
 
   const protein = Math.round(weight * 2.1);
@@ -51,11 +63,31 @@ export default function OnboardingTargetsScreen() {
   }>();
 
   const goal = params.goal || "Body recomposition";
+  const age = Number(params.age || 22);
+  const height = Number(params.height || 175);
+  const weight = Number(params.weight || 72);
+  const sex = params.sex || "Male";
   const activity = params.activity || "Train 3–4 days/week";
-  const targets = calculateTargets(goal, params.weight || "72");
+
+  const targets = calculateTargets(goal, String(weight), activity);
 
   const handleStartTracking = async () => {
+    await saveUserProfile({
+      name: "Leeon",
+      goal,
+      age,
+      heightCm: height,
+      weightKg: weight,
+      sex,
+      activityLevel: activity,
+      units: "Metric",
+      diet: "No preference",
+      theme: "Dark",
+    });
+
+    await saveNutritionTargets(targets);
     await markOnboardingCompleted();
+
     router.replace("/");
   };
 
