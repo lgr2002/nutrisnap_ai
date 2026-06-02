@@ -20,8 +20,16 @@ import {
   SavedNutritionTargets,
   SavedUserProfile,
 } from "@/src/storage/userProfileStorage";
+import { API_BASE_URL, API_CONFIG_LABEL, API_ENV } from "@/src/api/config";
+import {
+  resetPremiumStatus,
+  getPremiumStatus,
+} from "@/src/storage/subscriptionStorage";
+import { resetTodayScanCount } from "@/src/storage/scanUsageStorage";
 
 export default function ProfileScreen() {
+  const [isPremium, setIsPremium] = useState(false);
+
   const [profile, setProfile] = useState<SavedUserProfile>({
     name: mockUser.name,
     goal: mockUser.goal,
@@ -46,6 +54,7 @@ export default function ProfileScreen() {
     const loadProfileData = async () => {
       const savedProfile = await loadUserProfile();
       const savedTargets = await loadNutritionTargets();
+      const premiumStatus = await getPremiumStatus();
 
       if (savedProfile) {
         setProfile(savedProfile);
@@ -54,6 +63,8 @@ export default function ProfileScreen() {
       if (savedTargets) {
         setTargets(savedTargets);
       }
+
+      setIsPremium(premiumStatus);
     };
 
     loadProfileData();
@@ -63,6 +74,16 @@ export default function ProfileScreen() {
     await resetOnboardingState();
     await resetUserProfileAndTargets();
     router.replace("/welcome");
+  };
+
+  const resetDemoSubscription = async () => {
+    await resetPremiumStatus();
+    await resetTodayScanCount();
+    setIsPremium(false);
+
+    if (Platform.OS !== "web") {
+      Alert.alert("Demo reset", "Premium status and scan count were reset.");
+    }
   };
 
   const confirmRestartOnboarding = () => {
@@ -88,6 +109,29 @@ export default function ProfileScreen() {
     );
   };
 
+  const confirmResetDemoSubscription = () => {
+    if (Platform.OS === "web") {
+      resetDemoSubscription();
+      return;
+    }
+
+    Alert.alert(
+      "Reset demo subscription?",
+      "This will return the app to the free plan and reset today's scan count.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: resetDemoSubscription,
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -104,14 +148,22 @@ export default function ProfileScreen() {
 
         <View style={styles.planCard}>
           <Text style={styles.planLabel}>Current Plan</Text>
-          <Text style={styles.planTitle}>{mockUser.plan}</Text>
+          <Text style={styles.planTitle}>
+            {isPremium ? "Premium Demo" : mockUser.plan}
+          </Text>
           <Text style={styles.planText}>
-            3 AI meal scans per day. Upgrade for unlimited scans, weekly reports
-            and advanced coaching.
+            {isPremium
+              ? "Unlimited demo scans are enabled locally. Real subscriptions will be added later."
+              : "3 AI meal scans per day. Upgrade for unlimited scans, weekly reports and advanced coaching."}
           </Text>
 
-          <TouchableOpacity style={styles.upgradeButton}>
-            <Text style={styles.upgradeButtonText}>Upgrade to Premium</Text>
+          <TouchableOpacity
+            style={styles.upgradeButton}
+            onPress={() => router.push("/paywall")}
+          >
+            <Text style={styles.upgradeButtonText}>
+              {isPremium ? "View Premium" : "Upgrade to Premium"}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -180,6 +232,22 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Developer Settings</Text>
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>API mode</Text>
+            <Text style={styles.rowValue}>{API_CONFIG_LABEL}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>API env</Text>
+            <Text style={styles.rowValue}>{API_ENV}</Text>
+          </View>
+
+          <Text style={styles.apiUrlText}>{API_BASE_URL}</Text>
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>Preferences</Text>
 
           <View style={styles.row}>
@@ -207,6 +275,15 @@ export default function ProfileScreen() {
           onPress={confirmRestartOnboarding}
         >
           <Text style={styles.secondaryButtonText}>Restart Onboarding</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={confirmResetDemoSubscription}
+        >
+          <Text style={styles.secondaryButtonText}>
+            Reset Premium / Scan Demo
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.logoutButton}>
@@ -328,6 +405,13 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "right",
     flexShrink: 1,
+  },
+  apiUrlText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginTop: 14,
   },
   secondaryButton: {
     backgroundColor: colors.card,
