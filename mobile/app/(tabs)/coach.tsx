@@ -1,103 +1,251 @@
+import { useEffect, useState } from "react";
 import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
-import { mockTargets, mockToday, mockUser } from "@/src/data/mockData";
+import { mockMeals, mockTargets, mockUser } from "@/src/data/mockData";
+import { loadMealsFromStorage, StoredMeal } from "@/src/storage/mealStorage";
+import {
+  loadNutritionTargets,
+  loadUserProfile,
+  SavedNutritionTargets,
+  SavedUserProfile,
+} from "@/src/storage/userProfileStorage";
+import {
+  buildCoachInsight,
+  calculateDailyTotals,
+  getCalorieProgressPercent,
+  getRemainingCalories,
+} from "@/src/utils/nutritionSummary";
 
-const suggestions = [
-  "What should I eat next?",
-  "Am I overeating today?",
-  "How do I hit protein?",
-  "Why am I still hungry?",
-];
+function buildActionItems(
+  meals: StoredMeal[],
+  targets: SavedNutritionTargets
+): string[] {
+  const totals = calculateDailyTotals(meals);
+  const items: string[] = [];
+
+  if (meals.length === 0) {
+    return [
+      "Log one meal using Scan so the coach can give useful advice.",
+      "Add a short description with the photo for better estimates.",
+      "Set your target from onboarding before comparing progress.",
+    ];
+  }
+
+  if (totals.protein < targets.protein) {
+    items.push("Add a protein-focused meal or snack before the day ends.");
+  }
+
+  if (totals.calories > targets.calories) {
+    items.push("Keep the next meal lighter and avoid extra oil, cheese or sauce.");
+  }
+
+  if (totals.carbs > targets.carbs) {
+    items.push("Carbs are high today. Choose more protein and vegetables next.");
+  }
+
+  if (totals.fat > targets.fat) {
+    items.push("Fat is high today. Watch fried food, oil, cheese and creamy sauces.");
+  }
+
+  if (items.length === 0) {
+    items.push("You are balanced today. Keep your next meal simple and consistent.");
+    items.push("Add fruit or fibre if digestion or fullness is an issue.");
+  }
+
+  return items.slice(0, 3);
+}
+
+function buildMealSuggestion(
+  meals: StoredMeal[],
+  targets: SavedNutritionTargets
+) {
+  const totals = calculateDailyTotals(meals);
+
+  if (totals.calories > targets.calories) {
+    return "Lean chicken salad, tuna bowl, egg whites, or Greek yoghurt would be safer tonight.";
+  }
+
+  if (totals.protein < targets.protein * 0.7) {
+    return "Chicken rice with controlled sauce, steak with vegetables, tuna sandwich, or protein shake with milk.";
+  }
+
+  if (totals.fat > targets.fat * 0.85) {
+    return "Choose grilled food instead of fried food. Keep sauces light.";
+  }
+
+  return "A balanced meal with lean protein, moderate carbs and some fibre fits best.";
+}
 
 export default function CoachScreen() {
-  const caloriesText = `${mockToday.caloriesEaten.toLocaleString()} / ${mockTargets.calories.toLocaleString()} kcal`;
-  const proteinText = `${mockToday.proteinEaten} / ${mockTargets.protein} g`;
+  const [meals, setMeals] = useState<StoredMeal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [profile, setProfile] = useState<SavedUserProfile>({
+    name: mockUser.name,
+    goal: mockUser.goal,
+    age: mockUser.age,
+    heightCm: mockUser.heightCm,
+    weightKg: mockUser.weightKg,
+    sex: "Male",
+    activityLevel: mockUser.activityLevel,
+    units: mockUser.units,
+    diet: mockUser.diet,
+    theme: mockUser.theme,
+  });
+
+  const [targets, setTargets] = useState<SavedNutritionTargets>({
+    calories: mockTargets.calories,
+    protein: mockTargets.protein,
+    carbs: mockTargets.carbs,
+    fat: mockTargets.fat,
+  });
+
+  useEffect(() => {
+    const loadCoachData = async () => {
+      const savedMeals = await loadMealsFromStorage();
+      const savedProfile = await loadUserProfile();
+      const savedTargets = await loadNutritionTargets();
+
+      setMeals(savedMeals || mockMeals);
+
+      if (savedProfile) {
+        setProfile(savedProfile);
+      }
+
+      if (savedTargets) {
+        setTargets(savedTargets);
+      }
+
+      setIsLoading(false);
+    };
+
+    loadCoachData();
+  }, []);
+
+  const totals = calculateDailyTotals(meals);
+  const remainingCalories = getRemainingCalories(totals, targets);
+  const calorieProgress = getCalorieProgressPercent(totals, targets);
+  const insight = buildCoachInsight(totals, targets, meals.length);
+  const actionItems = buildActionItems(meals, targets);
+  const mealSuggestion = buildMealSuggestion(meals, targets);
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading coach...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>AI Coach</Text>
-          <Text style={styles.subtitle}>
-            Ask about your food, goals, training or progress.
-          </Text>
-        </View>
-
-        <View style={styles.contextCard}>
-          <Text style={styles.contextLabel}>Today&apos;s Context</Text>
-
-          <View style={styles.contextRow}>
-            <Text style={styles.contextText}>Calories</Text>
-            <Text style={styles.contextValue}>{caloriesText}</Text>
-          </View>
-
-          <View style={styles.contextRow}>
-            <Text style={styles.contextText}>Protein</Text>
-            <Text style={styles.contextValue}>{proteinText}</Text>
-          </View>
-
-          <View style={styles.contextRow}>
-            <Text style={styles.contextText}>Goal</Text>
-            <Text style={styles.contextValue}>{mockUser.goal}</Text>
+          <View>
+            <Text style={styles.title}>AI Coach</Text>
+            <Text style={styles.subtitle}>
+              Personal guidance from your saved meals and targets.
+            </Text>
           </View>
         </View>
 
-        <View style={styles.insightCard}>
-          <Text style={styles.insightLabel}>Coach Insight</Text>
-          <Text style={styles.insightText}>
-            You still have room for a protein-heavy meal today. Choose lean
-            protein and fibre instead of another high-fat meal.
-          </Text>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroLabel}>Today&apos;s Coach Summary</Text>
+          <Text style={styles.heroText}>{insight}</Text>
+
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${calorieProgress}%` }]} />
+          </View>
+
+          <View style={styles.heroMetaRow}>
+            <Text style={styles.heroMeta}>
+              {totals.calories.toLocaleString()} /{" "}
+              {targets.calories.toLocaleString()} kcal
+            </Text>
+            <Text style={styles.heroMeta}>
+              {remainingCalories.toLocaleString()} kcal left
+            </Text>
+          </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Suggested questions</Text>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Your Current Goal</Text>
 
-        <View style={styles.chipWrap}>
-          {suggestions.map((item) => (
-            <TouchableOpacity key={item} style={styles.chip}>
-              <Text style={styles.chipText}>{item}</Text>
-            </TouchableOpacity>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Goal</Text>
+            <Text style={styles.rowValue}>{profile.goal}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Activity</Text>
+            <Text style={styles.rowValue}>{profile.activityLevel}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Meals logged</Text>
+            <Text style={styles.rowValue}>{meals.length}</Text>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Action Plan</Text>
+
+          {actionItems.map((item, index) => (
+            <View key={item} style={styles.actionItem}>
+              <View style={styles.actionNumber}>
+                <Text style={styles.actionNumberText}>{index + 1}</Text>
+              </View>
+              <Text style={styles.actionText}>{item}</Text>
+            </View>
           ))}
         </View>
 
-        <View style={styles.chatCard}>
-          <View style={styles.userBubble}>
-            <Text style={styles.userText}>
-              I&apos;m hungry at night. What should I eat?
+        <View style={styles.suggestionCard}>
+          <Text style={styles.suggestionLabel}>Next meal suggestion</Text>
+          <Text style={styles.suggestionText}>{mealSuggestion}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Macro Check</Text>
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Protein</Text>
+            <Text style={styles.rowValue}>
+              {totals.protein}g / {targets.protein}g
             </Text>
           </View>
 
-          <View style={styles.aiBubble}>
-            <Text style={styles.aiText}>
-              Based on today&apos;s log, prioritise protein and fibre. Good
-              options: eggs, Greek yoghurt, chicken, tuna, fruit, or a protein
-              shake with water or low-fat milk.
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Carbs</Text>
+            <Text style={styles.rowValue}>
+              {totals.carbs}g / {targets.carbs}g
+            </Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Fat</Text>
+            <Text style={styles.rowValue}>
+              {totals.fat}g / {targets.fat}g
             </Text>
           </View>
         </View>
 
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="Ask your coach..."
-            placeholderTextColor={colors.textMuted}
-          />
-
-          <TouchableOpacity style={styles.sendButton}>
-            <Text style={styles.sendButtonText}>↑</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>Ask Coach a Question</Text>
+        </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          Nutrition guidance is general and not medical advice.
+          Coach advice is general guidance only. Real personalised coaching will
+          improve when the AI backend and user database are connected.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -108,6 +256,16 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "800",
   },
   container: {
     padding: spacing.screen,
@@ -127,53 +285,121 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 6,
     fontWeight: "600",
-    lineHeight: 22,
   },
-  contextCard: {
+  heroCard: {
     backgroundColor: colors.cardAlt,
     borderRadius: radius.xxl,
-    padding: 22,
+    padding: spacing.cardLarge,
     marginBottom: 18,
     borderWidth: 1,
     borderColor: colors.borderViolet,
   },
-  contextLabel: {
-    color: colors.textSecondary,
+  heroLabel: {
+    color: colors.secondary,
     fontSize: 13,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
-    marginBottom: 14,
+    marginBottom: 10,
   },
-  contextRow: {
+  heroText: {
+    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 30,
+  },
+  progressTrack: {
+    height: 12,
+    backgroundColor: colors.border,
+    borderRadius: radius.pill,
+    marginTop: 18,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+  },
+  heroMetaRow: {
+    marginTop: 14,
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 12,
-    gap: 16,
+    gap: 12,
   },
-  contextText: {
+  heroMeta: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing.card,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sectionTitle: {
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+  row: {
+    marginTop: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 14,
+  },
+  rowLabel: {
     color: colors.textSecondary,
     fontSize: 15,
     fontWeight: "700",
   },
-  contextValue: {
+  rowValue: {
     color: colors.textPrimary,
     fontSize: 15,
     fontWeight: "900",
     textAlign: "right",
     flexShrink: 1,
   },
-  insightCard: {
+  actionItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginTop: 16,
+  },
+  actionNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionNumberText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  actionText: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 22,
+  },
+  suggestionCard: {
     backgroundColor: colors.card,
     borderRadius: radius.xl,
     padding: spacing.card,
-    marginBottom: 24,
+    marginBottom: 18,
     borderWidth: 1,
     borderColor: colors.border,
     borderLeftWidth: 5,
     borderLeftColor: colors.secondary,
   },
-  insightLabel: {
+  suggestionLabel: {
     color: colors.secondary,
     fontSize: 13,
     fontWeight: "900",
@@ -181,105 +407,28 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 8,
   },
-  insightText: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 22,
-  },
-  sectionTitle: {
-    color: colors.textPrimary,
-    fontSize: 20,
-    fontWeight: "900",
-    marginBottom: 14,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 22,
-  },
-  chip: {
-    backgroundColor: colors.card,
-    borderRadius: radius.pill,
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipText: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  chatCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 16,
-  },
-  userBubble: {
-    alignSelf: "flex-end",
-    backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    padding: 14,
-    maxWidth: "85%",
-    marginBottom: 12,
-  },
-  userText: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "700",
-    lineHeight: 21,
-  },
-  aiBubble: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.border,
-    borderRadius: radius.medium,
-    padding: 14,
-    maxWidth: "90%",
-  },
-  aiText: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 22,
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.card,
-    borderRadius: radius.pill,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  input: {
-    flex: 1,
+  suggestionText: {
     color: colors.textPrimary,
     fontSize: 16,
-    paddingHorizontal: 14,
+    fontWeight: "800",
+    lineHeight: 24,
   },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  primaryButton: {
     backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingVertical: 18,
     alignItems: "center",
-    justifyContent: "center",
   },
-  sendButtonText: {
+  primaryButtonText: {
     color: colors.textPrimary,
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: "900",
   },
   disclaimer: {
     color: colors.textSecondary,
     textAlign: "center",
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 19,
     marginTop: 14,
-    lineHeight: 18,
   },
 });
