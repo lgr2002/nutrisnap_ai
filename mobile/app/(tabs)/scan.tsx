@@ -1,9 +1,9 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ActionSheetIOS,
   Alert,
   Image,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -22,16 +22,30 @@ import {
 } from "@/src/storage/scanUsageStorage";
 import { getPremiumStatus } from "@/src/storage/subscriptionStorage";
 
-const PORTION_OPTIONS = [
-  "Small portion",
-  "Medium portion",
-  "Large portion",
-  "Half meal",
-  "Whole meal",
-  "Not sure",
+type PickerOption = {
+  label: string;
+  value: string;
+  note?: string;
+};
+
+const PORTION_OPTIONS: PickerOption[] = [
+  { label: "Small portion", value: "small", note: "Light snack or smaller serve" },
+  { label: "Medium portion", value: "medium", note: "Average serving size" },
+  { label: "Large portion", value: "large", note: "Big plate or heavy serve" },
+  { label: "Half meal", value: "half", note: "About half the meal" },
+  { label: "Whole meal", value: "whole", note: "You ate all of it" },
+  { label: "Not sure", value: "unsure", note: "Let AI estimate roughly" },
 ];
 
-const MEAL_TIME_OPTIONS = ["Now", "Breakfast", "Lunch", "Dinner", "Snack"];
+const MEAL_TIME_OPTIONS: PickerOption[] = [
+  { label: "Now", value: "now", note: "Just ate it" },
+  { label: "Breakfast", value: "breakfast", note: "Morning meal" },
+  { label: "Lunch", value: "lunch", note: "Midday meal" },
+  { label: "Dinner", value: "dinner", note: "Evening meal" },
+  { label: "Snack", value: "snack", note: "Small meal or snack" },
+];
+
+type SelectorState = "none" | "portion" | "mealTime";
 
 function showMessage(title: string, message: string) {
   if (Platform.OS === "web") {
@@ -47,15 +61,14 @@ export default function ScanMealScreen() {
   const [optionalDetails, setOptionalDetails] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
 
-  const [selectedPortion, setSelectedPortion] = useState("Whole meal");
-  const [selectedMealTime, setSelectedMealTime] = useState("Now");
-
-  const [showPortionOptions, setShowPortionOptions] = useState(false);
-  const [showMealTimeOptions, setShowMealTimeOptions] = useState(false);
+  const [portion, setPortion] = useState("whole");
+  const [mealTime, setMealTime] = useState("now");
 
   const [isPremium, setIsPremium] = useState(false);
   const [scanCount, setScanCount] = useState(0);
   const [isLoadingUsage, setIsLoadingUsage] = useState(true);
+
+  const [selectorState, setSelectorState] = useState<SelectorState>("none");
 
   const freeLimit = getFreeDailyScanLimit();
   const scansRemaining = Math.max(freeLimit - scanCount, 0);
@@ -75,120 +88,81 @@ export default function ScanMealScreen() {
     loadUsage();
   }, []);
 
+  const selectedPortion = useMemo(
+    () =>
+      PORTION_OPTIONS.find((item) => item.value === portion) ??
+      PORTION_OPTIONS[4],
+    [portion]
+  );
+
+  const selectedMealTime = useMemo(
+    () =>
+      MEAL_TIME_OPTIONS.find((item) => item.value === mealTime) ??
+      MEAL_TIME_OPTIONS[0],
+    [mealTime]
+  );
+
   const chooseFromLibrary = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-    if (!permission.granted) {
-      showMessage(
-        "Permission needed",
-        "Photo library permission is needed to upload food photos."
-      );
-      return;
-    }
+      if (!permission.granted) {
+        showMessage(
+          "Permission needed",
+          "Please allow photo access for Expo Go in your iPhone settings."
+        );
+        return;
+      }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.85,
-    });
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.85,
+      });
 
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+      if (!result.canceled && result.assets?.length > 0) {
+        setImageUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not open photo library.";
+
+      showMessage("Photo picker error", message);
     }
   };
 
   const takePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
 
-    if (!permission.granted) {
-      showMessage(
-        "Permission needed",
-        "Camera permission is needed to take food photos."
-      );
-      return;
-    }
+      if (!permission.granted) {
+        showMessage(
+          "Permission needed",
+          "Please allow camera access for Expo Go in your iPhone settings."
+        );
+        return;
+      }
 
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.85,
-    });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.85,
+      });
 
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+      if (!result.canceled && result.assets?.length > 0) {
+        setImageUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not open camera.";
+
+      showMessage("Camera error", message);
     }
   };
 
-  const handlePhotoPress = () => {
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ["Cancel", "Take Photo", "Choose from Library", "Remove Photo"],
-          cancelButtonIndex: 0,
-          destructiveButtonIndex: imageUri ? 3 : undefined,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 1) {
-            takePhoto();
-          }
-
-          if (buttonIndex === 2) {
-            chooseFromLibrary();
-          }
-
-          if (buttonIndex === 3) {
-            setImageUri(null);
-          }
-        }
-      );
-
-      return;
-    }
-
-    chooseFromLibrary();
-  };
-
-  const showPortionPicker = () => {
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ["Cancel", ...PORTION_OPTIONS],
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex > 0) {
-            setSelectedPortion(PORTION_OPTIONS[buttonIndex - 1]);
-          }
-        }
-      );
-
-      return;
-    }
-
-    setShowPortionOptions((current) => !current);
-    setShowMealTimeOptions(false);
-  };
-
-  const showMealTimePicker = () => {
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ["Cancel", ...MEAL_TIME_OPTIONS],
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex > 0) {
-            setSelectedMealTime(MEAL_TIME_OPTIONS[buttonIndex - 1]);
-          }
-        }
-      );
-
-      return;
-    }
-
-    setShowMealTimeOptions((current) => !current);
-    setShowPortionOptions(false);
+  const removePhoto = () => {
+    setImageUri(null);
   };
 
   const handleEstimateMeal = async () => {
@@ -212,14 +186,30 @@ export default function ScanMealScreen() {
         mealName: mealDescription,
         optionalDetails: optionalDetails.trim(),
         imageUri: imageUri || "",
-        portion: selectedPortion,
-        mealTimeLabel: selectedMealTime,
+        portion: selectedPortion.label,
+        mealTimeLabel: selectedMealTime.label,
       },
     });
   };
 
   const canEstimate = description.trim().length > 0 || !!imageUri;
   const usingPhotoAI = Boolean(imageUri);
+
+  const activePickerOptions =
+    selectorState === "portion" ? PORTION_OPTIONS : MEAL_TIME_OPTIONS;
+
+  const activePickerTitle =
+    selectorState === "portion" ? "Select portion size" : "Select meal time";
+
+  const handleSelectOption = (value: string) => {
+    if (selectorState === "portion") {
+      setPortion(value);
+    } else if (selectorState === "mealTime") {
+      setMealTime(value);
+    }
+
+    setSelectorState("none");
+  };
 
   if (isLoadingUsage) {
     return (
@@ -233,7 +223,10 @@ export default function ScanMealScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Add Meal</Text>
@@ -267,33 +260,41 @@ export default function ScanMealScreen() {
           ) : null}
         </View>
 
-        <TouchableOpacity style={styles.uploadBox} onPress={handlePhotoPress}>
+        <View style={styles.uploadBox}>
           {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.foodImage} />
+            <>
+              <Image source={{ uri: imageUri }} style={styles.foodImage} />
+              <View style={styles.photoBadge}>
+                <Text style={styles.photoBadgeText}>Photo attached</Text>
+              </View>
+            </>
           ) : (
             <>
               <Text style={styles.cameraIcon}>📷</Text>
-              <Text style={styles.uploadTitle}>Take or upload food photo</Text>
+              <Text style={styles.uploadTitle}>Add a food photo</Text>
               <Text style={styles.uploadSubtitle}>
-                Photo AI can estimate visible portions, sauces, drinks and sides.
+                Optional, but useful for mixed meals, drinks, sauces and portions.
               </Text>
             </>
           )}
-        </TouchableOpacity>
+        </View>
+
+        <View style={styles.photoButtonRow}>
+          <TouchableOpacity style={styles.photoButton} onPress={takePhoto}>
+            <Text style={styles.photoButtonIcon}>📸</Text>
+            <Text style={styles.photoButtonText}>Take photo</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.photoButton} onPress={chooseFromLibrary}>
+            <Text style={styles.photoButtonIcon}>🖼️</Text>
+            <Text style={styles.photoButtonText}>Choose photo</Text>
+          </TouchableOpacity>
+        </View>
 
         {imageUri ? (
-          <View style={styles.photoActionRow}>
-            <TouchableOpacity style={styles.photoAction} onPress={handlePhotoPress}>
-              <Text style={styles.photoActionText}>Change photo</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.removePhotoAction}
-              onPress={() => setImageUri(null)}
-            >
-              <Text style={styles.removePhotoText}>Remove</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.removePhotoFullButton} onPress={removePhoto}>
+            <Text style={styles.removePhotoText}>Remove photo</Text>
+          </TouchableOpacity>
         ) : null}
 
         <View style={styles.aiModeCard}>
@@ -302,8 +303,8 @@ export default function ScanMealScreen() {
           </Text>
           <Text style={styles.aiModeText}>
             {usingPhotoAI
-              ? "Photo estimates use more API credits and may take longer, but they can improve portion and item recognition."
-              : "Text-only estimates are faster and cheaper. Add a photo when portion size or food type is hard to describe."}
+              ? "Photo estimates can improve visible portion and item recognition, but may take longer."
+              : "Text-only estimates are faster. Add a photo when the meal is hard to describe."}
           </Text>
         </View>
 
@@ -320,75 +321,31 @@ export default function ScanMealScreen() {
         </View>
 
         <View style={styles.formSection}>
-          <Text style={styles.label}>How much did you eat?</Text>
-
-          <TouchableOpacity style={styles.selectBox} onPress={showPortionPicker}>
-            <Text style={styles.selectText}>{selectedPortion}</Text>
-            <Text style={styles.selectArrow}>⌄</Text>
-          </TouchableOpacity>
-
-          {showPortionOptions ? (
-            <View style={styles.optionList}>
-              {PORTION_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.optionItem,
-                    selectedPortion === option && styles.selectedOptionItem,
-                  ]}
-                  onPress={() => {
-                    setSelectedPortion(option);
-                    setShowPortionOptions(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      selectedPortion === option && styles.selectedOptionText,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+          <Text style={styles.label}>Portion size</Text>
+          <TouchableOpacity
+            style={styles.selectBox}
+            onPress={() => setSelectorState("portion")}
+          >
+            <View style={styles.selectTextWrap}>
+              <Text style={styles.selectText}>{selectedPortion.label}</Text>
+              <Text style={styles.selectHelper}>{selectedPortion.note}</Text>
             </View>
-          ) : null}
+            <Text style={styles.selectArrow}>›</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.formSection}>
-          <Text style={styles.label}>Meal time</Text>
-
-          <TouchableOpacity style={styles.selectBox} onPress={showMealTimePicker}>
-            <Text style={styles.selectText}>{selectedMealTime}</Text>
-            <Text style={styles.selectArrow}>⌄</Text>
-          </TouchableOpacity>
-
-          {showMealTimeOptions ? (
-            <View style={styles.optionList}>
-              {MEAL_TIME_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.optionItem,
-                    selectedMealTime === option && styles.selectedOptionItem,
-                  ]}
-                  onPress={() => {
-                    setSelectedMealTime(option);
-                    setShowMealTimeOptions(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      selectedMealTime === option && styles.selectedOptionText,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+          <Text style={styles.label}>When did you eat it?</Text>
+          <TouchableOpacity
+            style={styles.selectBox}
+            onPress={() => setSelectorState("mealTime")}
+          >
+            <View style={styles.selectTextWrap}>
+              <Text style={styles.selectText}>{selectedMealTime.label}</Text>
+              <Text style={styles.selectHelper}>{selectedMealTime.note}</Text>
             </View>
-          ) : null}
+            <Text style={styles.selectArrow}>›</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.formSection}>
@@ -417,17 +374,81 @@ export default function ScanMealScreen() {
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          AI estimates are approximate. You can edit before saving.
+          AI estimates are approximate. You can review everything before saving.
         </Text>
 
         <View style={styles.tipCard}>
           <Text style={styles.tipLabel}>Accuracy Tip</Text>
           <Text style={styles.tipText}>
-            Best result: clear photo + short description + important details like
-            sauce, oil, drink, or portion size.
+            Best result: clear photo + short description + details like sauce, oil,
+            drink, or portion size.
           </Text>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={selectorState !== "none"}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectorState("none")}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.backdrop}
+            activeOpacity={1}
+            onPress={() => setSelectorState("none")}
+          />
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>{activePickerTitle}</Text>
+
+            {activePickerOptions.map((item) => {
+              const isActive =
+                selectorState === "portion"
+                  ? portion === item.value
+                  : mealTime === item.value;
+
+              return (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[styles.optionRow, isActive && styles.optionRowActive]}
+                  onPress={() => handleSelectOption(item.value)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.optionTitle,
+                        isActive && styles.optionTitleActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+
+                    {item.note ? (
+                      <Text
+                        style={[
+                          styles.optionNote,
+                          isActive && styles.optionNoteActive,
+                        ]}
+                      >
+                        {item.note}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {isActive ? <Text style={styles.optionCheck}>✓</Text> : null}
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setSelectorState("none")}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -536,11 +557,28 @@ const styles = StyleSheet.create({
     padding: spacing.cardLarge,
     marginBottom: 14,
     overflow: "hidden",
+    position: "relative",
   },
   foodImage: {
     width: "100%",
     height: "100%",
     borderRadius: radius.xxl,
+  },
+  photoBadge: {
+    position: "absolute",
+    bottom: 14,
+    left: 14,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    borderRadius: radius.pill,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.secondary,
+  },
+  photoBadgeText: {
+    color: colors.secondary,
+    fontSize: 13,
+    fontWeight: "900",
   },
   cameraIcon: {
     fontSize: 42,
@@ -559,33 +597,37 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-  photoActionRow: {
+  photoButtonRow: {
     flexDirection: "row",
     gap: 10,
     marginBottom: 14,
   },
-  photoAction: {
+  photoButton: {
     flex: 1,
     backgroundColor: colors.card,
-    borderRadius: radius.pill,
-    paddingVertical: 13,
+    borderRadius: radius.large,
+    paddingVertical: 15,
     alignItems: "center",
     borderWidth: 1,
     borderColor: colors.border,
   },
-  photoActionText: {
+  photoButtonIcon: {
+    fontSize: 20,
+    marginBottom: 5,
+  },
+  photoButtonText: {
     color: colors.textPrimary,
     fontSize: 14,
     fontWeight: "900",
   },
-  removePhotoAction: {
-    backgroundColor: "rgba(255, 107, 107, 0.12)",
+  removePhotoFullButton: {
+    backgroundColor: "rgba(255, 107, 107, 0.1)",
     borderRadius: radius.pill,
     paddingVertical: 13,
-    paddingHorizontal: 18,
     alignItems: "center",
     borderWidth: 1,
     borderColor: colors.danger,
+    marginBottom: 14,
   },
   removePhotoText: {
     color: colors.danger,
@@ -645,83 +687,69 @@ const styles = StyleSheet.create({
   },
   selectBox: {
     backgroundColor: colors.card,
-    borderRadius: radius.medium,
-    padding: 18,
+    borderRadius: radius.large,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     borderWidth: 1,
     borderColor: colors.border,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+  },
+  selectTextWrap: {
+    flex: 1,
+    paddingRight: 10,
   },
   selectText: {
     color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  selectHelper: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 5,
   },
   selectArrow: {
     color: colors.textSecondary,
-    fontSize: 22,
-  },
-  optionList: {
-    backgroundColor: colors.card,
-    borderRadius: radius.large,
-    marginTop: 10,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  optionItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  selectedOptionItem: {
-    backgroundColor: colors.cardAlt,
-  },
-  optionText: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  selectedOptionText: {
-    color: colors.secondary,
+    fontSize: 28,
+    fontWeight: "700",
+    marginTop: -2,
   },
   estimateButton: {
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
     paddingVertical: 18,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 6,
   },
   disabledButton: {
-    opacity: 0.55,
+    opacity: 0.5,
   },
   estimateButtonText: {
     color: colors.textPrimary,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
   },
   disclaimer: {
     color: colors.textSecondary,
     textAlign: "center",
     fontSize: 13,
-    marginTop: 14,
-    marginBottom: 22,
     lineHeight: 19,
+    marginTop: 14,
   },
   tipCard: {
     backgroundColor: colors.card,
-    borderRadius: radius.large,
-    padding: 18,
+    borderRadius: radius.xl,
+    padding: spacing.card,
     borderWidth: 1,
     borderColor: colors.border,
-    borderLeftWidth: 5,
-    borderLeftColor: colors.secondary,
+    marginTop: 16,
   },
   tipLabel: {
     color: colors.secondary,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
@@ -729,8 +757,81 @@ const styles = StyleSheet.create({
   },
   tipText: {
     color: colors.textPrimary,
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 21,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.58)",
+  },
+  sheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    paddingBottom: 30,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sheetTitle: {
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 16,
+  },
+  optionRow: {
+    backgroundColor: colors.background,
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  optionRowActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.cardAlt,
+  },
+  optionTitle: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  optionTitleActive: {
+    color: colors.textPrimary,
+  },
+  optionNote: {
+    color: colors.textSecondary,
+    fontSize: 13,
     fontWeight: "600",
-    lineHeight: 22,
+    marginTop: 4,
+  },
+  optionNoteActive: {
+    color: colors.textSecondary,
+  },
+  optionCheck: {
+    color: colors.primary,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  cancelButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  cancelButtonText: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "900",
   },
 });
