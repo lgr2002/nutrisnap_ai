@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as ImageManipulator from "expo-image-manipulator";
 import { colors, radius, spacing } from "@/src/theme";
 import { estimateMealFromDescription } from "@/src/data/estimateMeal";
 import {
@@ -32,6 +33,11 @@ function formatEstimateSource(source?: string) {
     return "Backend";
   }
 
+  if (source.startsWith("openai_vision:")) {
+    const modelName = source.replace("openai_vision:", "");
+    return `OpenAI Vision · ${modelName}`;
+  }
+
   if (source.startsWith("openai:")) {
     const modelName = source.replace("openai:", "");
     return `OpenAI · ${modelName}`;
@@ -46,6 +52,39 @@ function formatEstimateSource(source?: string) {
   }
 
   return source;
+}
+
+function getMimeTypeFromUri() {
+  return "image/jpeg";
+}
+
+async function imageUriToBase64(imageUri: string) {
+  if (!imageUri) {
+    return null;
+  }
+
+  try {
+    const manipulatedImage = await ImageManipulator.manipulateAsync(
+      imageUri,
+      [
+        {
+          resize: {
+            width: 900,
+          },
+        },
+      ],
+      {
+        compress: 0.75,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      }
+    );
+
+    return manipulatedImage.base64 || null;
+  } catch (error) {
+    console.warn("Failed to convert image to base64:", error);
+    return null;
+  }
 }
 
 export default function MealResultScreen() {
@@ -102,12 +141,16 @@ export default function MealResultScreen() {
       }
 
       try {
+        const imageBase64 = imageUri ? await imageUriToBase64(imageUri) : null;
+
         const backendEstimate: BackendMealEstimateResponse =
           await estimateMealWithBackend({
             meal_name: mealName,
             optional_details: optionalDetails,
             portion: "Whole meal",
             image_attached: Boolean(imageUri),
+            image_base64: imageBase64 || undefined,
+            image_mime_type: imageBase64 ? getMimeTypeFromUri() : undefined,
           });
 
         setEstimate({
@@ -208,12 +251,15 @@ export default function MealResultScreen() {
 
           <View style={styles.loadingCard}>
             <Text style={styles.loadingStep}>✓ Reading meal description</Text>
-            <Text style={styles.loadingStep}>✓ Checking backend estimate</Text>
+            <Text style={styles.loadingStep}>
+              {imageUri ? "✓ Reading food photo" : "✓ No photo attached"}
+            </Text>
+            <Text style={styles.loadingStep}>✓ Checking AI estimate</Text>
             <Text style={styles.loadingStep}>✓ Calculating macros</Text>
           </View>
 
           <Text style={styles.loadingText}>
-            This usually takes a few seconds.
+            Photo estimates can take a little longer.
           </Text>
         </View>
       </SafeAreaView>
@@ -308,11 +354,7 @@ export default function MealResultScreen() {
 
         <View style={styles.explanationCard}>
           <Text style={styles.explanationLabel}>Why this estimate?</Text>
-          <Text style={styles.explanationText}>
-            {imageUri && estimate.source.startsWith("OpenAI")
-              ? `${estimate.explanation} A photo was attached, but real image analysis will be added in the next AI backend stage.`
-              : estimate.explanation}
-          </Text>
+          <Text style={styles.explanationText}>{estimate.explanation}</Text>
         </View>
 
         <TouchableOpacity style={styles.editButton} onPress={handleEditEstimate}>
