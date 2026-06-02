@@ -1,8 +1,10 @@
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Platform,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -11,21 +13,55 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
-import { mockMeals, mockTargets, mockToday, mockUser } from "@/src/data/mockData";
-import {
-  loadNutritionTargets,
-  loadUserProfile,
-  SavedNutritionTargets,
-  SavedUserProfile,
-} from "@/src/storage/userProfileStorage";
-import {
-  clearMealsFromStorage,
-  loadMealsFromStorage,
-  saveMealsToStorage,
-  StoredMeal,
-} from "@/src/storage/mealStorage";
+import { mockTargets, mockUser } from "@/src/data/mockData";
+import { CloudMeal, deleteCloudMeal, loadTodayCloudMeals } from "@/src/api/mealCloudApi";
 
-type Meal = StoredMeal;
+type LocalMeal = {
+  id: string;
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  confidence: string;
+  time: string;
+  source: "local" | "cloud";
+};
+
+function getTodayLabel() {
+  return new Date().toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatMealTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function cloudMealToLocalMeal(meal: CloudMeal): LocalMeal {
+  return {
+    id: meal.id,
+    name: meal.meal_name,
+    calories: meal.calories,
+    protein: meal.protein_g,
+    carbs: meal.carbs_g,
+    fat: meal.fat_g,
+    confidence: meal.confidence,
+    time: formatMealTime(meal.meal_time),
+    source: "cloud",
+  };
+}
 
 export default function HomeScreen() {
   const params = useLocalSearchParams<{
@@ -36,123 +72,133 @@ export default function HomeScreen() {
     savedMealCarbs?: string;
     savedMealFat?: string;
     savedMealConfidence?: string;
+    cloudSaveStatus?: string;
   }>();
 
-  const [meals, setMeals] = useState<Meal[]>([]);
-  const [hasLoadedMeals, setHasLoadedMeals] = useState(false);
+  const [meals, setMeals] = useState<LocalMeal[]>([]);
+  const [isLoadingCloudMeals, setIsLoadingCloudMeals] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [cloudStatusMessage, setCloudStatusMessage] = useState("");
+  const [handledSavedMealId, setHandledSavedMealId] = useState<string | null>(
+    null
+  );
 
-  const [profile, setProfile] = useState<SavedUserProfile>({
-    name: mockUser.name,
-    goal: mockUser.goal,
-    age: mockUser.age,
-    heightCm: mockUser.heightCm,
-    weightKg: mockUser.weightKg,
-    sex: "Male",
-    activityLevel: mockUser.activityLevel,
-    units: mockUser.units,
-    diet: mockUser.diet,
-    theme: mockUser.theme,
-  });
+  const loadMeals = async (refreshing = false) => {
+    if (refreshing) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoadingCloudMeals(true);
+    }
 
-  const [targets, setTargets] = useState<SavedNutritionTargets>({
-    calories: mockTargets.calories,
-    protein: mockTargets.protein,
-    carbs: mockTargets.carbs,
-    fat: mockTargets.fat,
-  });
+    const result = await loadTodayCloudMeals();
 
-  const lastSavedMealId = useRef<string | null>(null);
+    if (result.ok) {
+      setMeals(result.meals.map(cloudMealToLocalMeal));
+    }
 
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      const savedMeals = await loadMealsFromStorage();
-      const savedProfile = await loadUserProfile();
-      const savedTargets = await loadNutritionTargets();
+    setCloudStatusMessage(result.message);
+    setIsLoadingCloudMeals(false);
+    setIsRefreshing(false);
+  };
 
-      if (savedMeals) {
-        setMeals(savedMeals);
-      } else {
-        setMeals(mockMeals);
-        await saveMealsToStorage(mockMeals);
-      }
+  useFocusEffect(
+    useCallback(() => {
+      loadMeals();
+    }, [])
+  );
 
-      if (savedProfile) {
-        setProfile(savedProfile);
-      }
-
-      if (savedTargets) {
-        setTargets(savedTargets);
-      }
-
-      setHasLoadedMeals(true);
-    };
-
-    loadDashboardData();
-  }, []);
-
-  useEffect(() => {
-    const addMealFromParams = async () => {
-      if (!hasLoadedMeals) {
+  useFocusEffect(
+    useCallback(() => {
+      if (!params.savedMealId || params.savedMealId === handledSavedMealId) {
         return;
       }
 
-      if (!params.savedMealId || lastSavedMealId.current === params.savedMealId) {
+      setHandledSavedMealId(params.savedMealId);
+
+      if (params.cloudSaveStatus === "saved") {
+        loadMeals();
         return;
       }
 
-      const newMeal: Meal = {
+      const localMeal: LocalMeal = {
         id: params.savedMealId,
-        time: "Now",
         name: params.savedMealName || "Saved meal",
         calories: Number(params.savedMealCalories || 0),
         protein: Number(params.savedMealProtein || 0),
         carbs: Number(params.savedMealCarbs || 0),
         fat: Number(params.savedMealFat || 0),
-        confidence: params.savedMealConfidence || "Low",
+        confidence: params.savedMealConfidence || "Medium",
+        time: new Date().toLocaleTimeString(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        source: "local",
       };
 
       setMeals((currentMeals) => {
-        const alreadyExists = currentMeals.some((meal) => meal.id === newMeal.id);
+        const exists = currentMeals.some((meal) => meal.id === localMeal.id);
 
-        if (alreadyExists) {
+        if (exists) {
           return currentMeals;
         }
 
-        const updatedMeals = [newMeal, ...currentMeals];
-        saveMealsToStorage(updatedMeals);
-        return updatedMeals;
+        return [localMeal, ...currentMeals];
       });
+    }, [
+      params.savedMealId,
+      params.savedMealName,
+      params.savedMealCalories,
+      params.savedMealProtein,
+      params.savedMealCarbs,
+      params.savedMealFat,
+      params.savedMealConfidence,
+      params.cloudSaveStatus,
+      handledSavedMealId,
+    ])
+  );
 
-      lastSavedMealId.current = params.savedMealId;
+  const totals = useMemo(() => {
+    return meals.reduce(
+      (acc, meal) => ({
+        calories: acc.calories + meal.calories,
+        protein: acc.protein + meal.protein,
+        carbs: acc.carbs + meal.carbs,
+        fat: acc.fat + meal.fat,
+      }),
+      {
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+      }
+    );
+  }, [meals]);
+
+  const caloriesRemaining = Math.max(mockTargets.calories - totals.calories, 0);
+  const calorieProgress = Math.min(totals.calories / mockTargets.calories, 1);
+
+  const handleDeleteMeal = async (meal: LocalMeal) => {
+    const removeMeal = async () => {
+      if (meal.source === "cloud") {
+        const result = await deleteCloudMeal(meal.id);
+
+        if (!result.ok && Platform.OS !== "web") {
+          Alert.alert("Delete failed", result.message);
+          return;
+        }
+      }
+
+      setMeals((currentMeals) =>
+        currentMeals.filter((currentMeal) => currentMeal.id !== meal.id)
+      );
     };
 
-    addMealFromParams();
-  }, [
-    hasLoadedMeals,
-    params.savedMealId,
-    params.savedMealName,
-    params.savedMealCalories,
-    params.savedMealProtein,
-    params.savedMealCarbs,
-    params.savedMealFat,
-    params.savedMealConfidence,
-  ]);
-
-  const deleteMeal = (mealId: string) => {
-    setMeals((currentMeals) => {
-      const updatedMeals = currentMeals.filter((meal) => meal.id !== mealId);
-      saveMealsToStorage(updatedMeals);
-      return updatedMeals;
-    });
-  };
-
-  const confirmDeleteMeal = (mealId: string, mealName: string) => {
     if (Platform.OS === "web") {
-      deleteMeal(mealId);
+      removeMeal();
       return;
     }
 
-    Alert.alert("Delete meal?", `Remove "${mealName}" from today?`, [
+    Alert.alert("Delete meal?", `Remove ${meal.name} from today?`, [
       {
         text: "Cancel",
         style: "cancel",
@@ -160,94 +206,28 @@ export default function HomeScreen() {
       {
         text: "Delete",
         style: "destructive",
-        onPress: () => deleteMeal(mealId),
+        onPress: removeMeal,
       },
     ]);
   };
 
-  const resetDemoMeals = async () => {
-    setMeals(mockMeals);
-    await saveMealsToStorage(mockMeals);
-  };
-
-  const clearAllMeals = async () => {
+  const resetLocalMeals = () => {
     setMeals([]);
-    await clearMealsFromStorage();
-    await saveMealsToStorage([]);
   };
 
-  const confirmResetDemoMeals = () => {
-    if (Platform.OS === "web") {
-      resetDemoMeals();
-      return;
-    }
+  const aiInsight =
+    totals.calories === 0
+      ? "Start by scanning or typing your first meal today."
+      : totals.protein < mockTargets.protein * 0.5
+        ? "Protein is still low today. Add chicken, eggs, Greek yoghurt or tofu later."
+        : "You are making progress today. Keep logging meals for better coaching.";
 
-    Alert.alert("Reset meals?", "This will restore the demo meal list.", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Reset",
-        style: "destructive",
-        onPress: resetDemoMeals,
-      },
-    ]);
-  };
-
-  const confirmClearAllMeals = () => {
-    if (Platform.OS === "web") {
-      clearAllMeals();
-      return;
-    }
-
-    Alert.alert("Clear all meals?", "This will remove all meals from today.", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Clear",
-        style: "destructive",
-        onPress: clearAllMeals,
-      },
-    ]);
-  };
-
-  const totalCalories = meals.reduce((sum, meal) => sum + meal.calories, 0);
-  const totalProtein = meals.reduce((sum, meal) => sum + meal.protein, 0);
-  const totalCarbs = meals.reduce((sum, meal) => sum + meal.carbs, 0);
-  const totalFat = meals.reduce((sum, meal) => sum + meal.fat, 0);
-
-  const remainingCalories = Math.max(targets.calories - totalCalories, 0);
-
-  const calorieProgress = `${Math.min(
-    Math.round((totalCalories / targets.calories) * 100),
-    100
-  )}%`;
-
-  const mealCountLabel = meals.length === 1 ? "1 meal" : `${meals.length} meals`;
-
-  const proteinProgressText = `${totalProtein}g / ${targets.protein}g`;
-
-  let insightText = "Protein is decent today. Add fibre or fruit later to balance the day.";
-
-  if (totalCalories > targets.calories) {
-    insightText =
-      "You are over your calorie target today. Keep the next meal lighter and focus on protein/fibre.";
-  } else if (totalProtein >= targets.protein) {
-    insightText =
-      "Protein target is looking strong today. Keep the next meal lighter if calories are high.";
-  } else if (totalProtein < targets.protein * 0.5) {
-    insightText =
-      "Protein is still low for your target. A lean protein meal would help balance the day.";
-  }
-
-  if (!hasLoadedMeals) {
+  if (isLoadingCloudMeals) {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading NutriSnap...</Text>
+          <ActivityIndicator color={colors.primary} size="large" />
+          <Text style={styles.loadingText}>Loading today’s meals...</Text>
         </View>
       </SafeAreaView>
     );
@@ -255,119 +235,134 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => loadMeals(true)}
+            tintColor={colors.primary}
+          />
+        }
+      >
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good evening, {profile.name}</Text>
-            <Text style={styles.date}>{mockToday.dateLabel}</Text>
+            <Text style={styles.greeting}>Good evening, {mockUser.name}</Text>
+            <Text style={styles.dateText}>Today · {getTodayLabel()}</Text>
           </View>
 
-          <View style={styles.notificationCircle}>
-            <Text style={styles.notificationDot}>●</Text>
-          </View>
-        </View>
-
-        <View style={styles.goalCard}>
-          <Text style={styles.goalLabel}>Current Goal</Text>
-          <Text style={styles.goalText}>{profile.goal}</Text>
-          <Text style={styles.goalMeta}>{profile.activityLevel}</Text>
+          <View style={styles.statusDot} />
         </View>
 
         <View style={styles.energyCard}>
-          <Text style={styles.label}>Daily Energy</Text>
-          <Text style={styles.bigNumber}>{totalCalories.toLocaleString()}</Text>
-          <Text style={styles.subText}>kcal eaten</Text>
-
+          <Text style={styles.energyLabel}>Daily Energy</Text>
           <View style={styles.energyRow}>
-            <Text style={styles.metaText}>
-              Goal: {targets.calories.toLocaleString()} kcal
+            <Text style={styles.energyNumber}>
+              {totals.calories.toLocaleString()}
             </Text>
-            <Text style={styles.metaText}>
-              Remaining: {remainingCalories.toLocaleString()} kcal
+            <Text style={styles.energyUnit}>kcal eaten</Text>
+          </View>
+
+          <View style={styles.energyMetaRow}>
+            <Text style={styles.energyMetaText}>
+              Goal: {mockTargets.calories.toLocaleString()} kcal
+            </Text>
+            <Text style={styles.energyMetaText}>
+              Remaining: {caloriesRemaining.toLocaleString()} kcal
             </Text>
           </View>
 
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: calorieProgress }]} />
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${calorieProgress * 100}%`,
+                },
+              ]}
+            />
           </View>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Macros</Text>
 
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Protein</Text>
-            <Text style={styles.rowValue}>{proteinProgressText}</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Carbs</Text>
-            <Text style={styles.rowValue}>
-              {totalCarbs}g / {targets.carbs}g
+          <View style={styles.macroRow}>
+            <Text style={styles.macroLabel}>Protein</Text>
+            <Text style={styles.macroValue}>
+              {totals.protein}g / {mockTargets.protein}g
             </Text>
           </View>
 
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Fat</Text>
-            <Text style={styles.rowValue}>
-              {totalFat}g / {targets.fat}g
-            </Text>
+          <View style={styles.macroRow}>
+            <Text style={styles.macroLabel}>Carbs</Text>
+            <Text style={styles.macroValue}>{totals.carbs}g</Text>
+          </View>
+
+          <View style={styles.macroRow}>
+            <Text style={styles.macroLabel}>Fat</Text>
+            <Text style={styles.macroValue}>{totals.fat}g</Text>
           </View>
         </View>
 
         <View style={styles.insightCard}>
           <Text style={styles.insightLabel}>AI Insight</Text>
-          <Text style={styles.insightText}>{insightText}</Text>
+          <Text style={styles.insightText}>{aiInsight}</Text>
+        </View>
+
+        <View style={styles.cloudCard}>
+          <Text style={styles.cloudLabel}>Cloud Sync</Text>
+          <Text style={styles.cloudText}>{cloudStatusMessage}</Text>
         </View>
 
         <View style={styles.mealsHeader}>
           <Text style={styles.sectionTitle}>Meals Today</Text>
-          <Text style={styles.mealCount}>{mealCountLabel}</Text>
+          <Text style={styles.mealCount}>{meals.length} meal</Text>
         </View>
 
         {meals.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No meals logged today.</Text>
-            <Text style={styles.emptyText}>
-              Scan your first meal to start tracking.
+          <View style={styles.emptyMealCard}>
+            <Text style={styles.emptyMealTitle}>No meals logged yet</Text>
+            <Text style={styles.emptyMealText}>
+              Scan or type your first meal to start tracking today.
             </Text>
           </View>
         ) : (
           meals.map((meal) => (
             <View key={meal.id} style={styles.mealCard}>
-              <View style={styles.mealTopRow}>
-                <View style={styles.mealInfo}>
-                  <Text style={styles.mealTime}>{meal.time}</Text>
-                  <Text style={styles.mealName}>{meal.name}</Text>
-                  <Text style={styles.mealMeta}>
-                    {meal.calories.toLocaleString()} kcal · {meal.confidence} confidence
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.deleteCircle}
-                  onPress={() => confirmDeleteMeal(meal.id, meal.name)}
-                >
-                  <Text style={styles.deleteCircleText}>×</Text>
-                </TouchableOpacity>
+              <View style={styles.mealTextWrap}>
+                <Text style={styles.mealTime}>
+                  {meal.time || "Now"} · {meal.source === "cloud" ? "Cloud" : "Local"}
+                </Text>
+                <Text style={styles.mealName}>{meal.name}</Text>
+                <Text style={styles.mealMeta}>
+                  {meal.calories.toLocaleString()} kcal · {meal.confidence} confidence
+                </Text>
               </View>
+
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDeleteMeal(meal)}
+              >
+                <Text style={styles.deleteText}>×</Text>
+              </TouchableOpacity>
             </View>
           ))
         )}
 
         <TouchableOpacity
-          style={styles.scanButton}
+          style={styles.primaryButton}
           onPress={() => router.push("/scan")}
         >
-          <Text style={styles.scanButtonText}>+ Scan Meal</Text>
+          <Text style={styles.primaryButtonText}>+ Scan Meal</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.resetButton} onPress={confirmResetDemoMeals}>
-          <Text style={styles.resetButtonText}>Reset demo meals</Text>
+        <TouchableOpacity style={styles.secondaryButton} onPress={loadMeals}>
+          <Text style={styles.secondaryButtonText}>Refresh cloud meals</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.clearButton} onPress={confirmClearAllMeals}>
-          <Text style={styles.clearButtonText}>Clear all meals</Text>
+        <TouchableOpacity style={styles.dangerButton} onPress={resetLocalMeals}>
+          <Text style={styles.dangerButtonText}>Clear visible meals</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -383,11 +378,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    padding: spacing.screen,
   },
   loadingText: {
     color: colors.textPrimary,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
+    marginTop: 14,
   },
   container: {
     padding: spacing.screen,
@@ -395,61 +392,29 @@ const styles = StyleSheet.create({
   },
   header: {
     marginTop: 12,
-    marginBottom: 18,
+    marginBottom: 22,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   greeting: {
     color: colors.textPrimary,
-    fontSize: 24,
-    fontWeight: "800",
-  },
-  date: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginTop: 6,
-  },
-  notificationCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  notificationDot: {
-    color: colors.secondary,
-    fontSize: 18,
-  },
-  goalCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    padding: spacing.card,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  goalLabel: {
-    color: colors.secondary,
-    fontSize: 12,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  goalText: {
-    color: colors.textPrimary,
-    fontSize: 21,
+    fontSize: 22,
     fontWeight: "900",
   },
-  goalMeta: {
+  dateText: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
-    marginTop: 6,
+    marginTop: 5,
+  },
+  statusDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.secondary,
+    borderWidth: 5,
+    borderColor: colors.card,
   },
   energyCard: {
     backgroundColor: colors.cardAlt,
@@ -459,39 +424,45 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderViolet,
   },
-  label: {
+  energyLabel: {
     color: colors.textSecondary,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
-  },
-  bigNumber: {
-    color: colors.textPrimary,
-    fontSize: 62,
-    fontWeight: "900",
-    marginTop: 10,
-  },
-  subText: {
-    color: colors.textSecondary,
-    fontSize: 18,
-    fontWeight: "600",
+    marginBottom: 10,
   },
   energyRow: {
-    marginTop: 22,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginBottom: 18,
+  },
+  energyNumber: {
+    color: colors.textPrimary,
+    fontSize: 48,
+    fontWeight: "900",
+  },
+  energyUnit: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "800",
+    marginLeft: 10,
+    marginBottom: 9,
+  },
+  energyMetaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginBottom: 10,
   },
-  metaText: {
-    color: colors.textSoft,
-    fontSize: 13,
-    fontWeight: "600",
+  energyMetaText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "800",
   },
   progressTrack: {
-    height: 12,
+    height: 9,
     backgroundColor: colors.border,
     borderRadius: radius.pill,
-    marginTop: 16,
     overflow: "hidden",
   },
   progressFill: {
@@ -510,28 +481,28 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: colors.textPrimary,
     fontSize: 20,
-    fontWeight: "800",
+    fontWeight: "900",
   },
-  row: {
+  macroRow: {
     marginTop: 16,
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  rowLabel: {
+  macroLabel: {
     color: colors.textSecondary,
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
   },
-  rowValue: {
+  macroValue: {
     color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "900",
   },
   insightCard: {
     backgroundColor: colors.card,
     borderRadius: radius.xl,
     padding: spacing.card,
-    marginBottom: 24,
+    marginBottom: 18,
     borderWidth: 1,
     borderColor: colors.border,
     borderLeftWidth: 5,
@@ -540,43 +511,65 @@ const styles = StyleSheet.create({
   insightLabel: {
     color: colors.secondary,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 8,
   },
   insightText: {
     color: colors.textPrimary,
-    fontSize: 16,
-    lineHeight: 23,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 22,
+  },
+  cloudCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing.card,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cloudLabel: {
+    color: colors.secondary,
+    fontSize: 13,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  cloudText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
   },
   mealsHeader: {
+    marginBottom: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
   },
   mealCount: {
     color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "800",
   },
-  emptyCard: {
+  emptyMealCard: {
     backgroundColor: colors.card,
-    borderRadius: radius.large,
-    padding: 20,
+    borderRadius: radius.xl,
+    padding: spacing.card,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 12,
   },
-  emptyTitle: {
+  emptyMealTitle: {
     color: colors.textPrimary,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "900",
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  emptyText: {
+  emptyMealText: {
     color: colors.textSecondary,
     fontSize: 14,
     fontWeight: "600",
@@ -585,89 +578,85 @@ const styles = StyleSheet.create({
   mealCard: {
     backgroundColor: colors.card,
     borderRadius: radius.large,
-    padding: 18,
+    padding: 16,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 12,
-  },
-  mealTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
     gap: 12,
   },
-  mealInfo: {
+  mealTextWrap: {
     flex: 1,
   },
   mealTime: {
     color: colors.secondary,
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "900",
     marginBottom: 6,
   },
   mealName: {
     color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 6,
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 4,
   },
   mealMeta: {
     color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "700",
   },
-  deleteCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(255, 107, 107, 0.14)",
+  deleteButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(255, 107, 107, 0.14)",
     borderWidth: 1,
     borderColor: colors.danger,
   },
-  deleteCircleText: {
+  deleteText: {
     color: colors.danger,
-    fontSize: 22,
-    fontWeight: "900",
+    fontSize: 20,
+    fontWeight: "800",
     marginTop: -2,
   },
-  scanButton: {
+  primaryButton: {
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
     paddingVertical: 18,
     alignItems: "center",
-    marginTop: 12,
-    marginBottom: 12,
+    marginTop: 8,
   },
-  scanButtonText: {
+  primaryButtonText: {
     color: colors.textPrimary,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
   },
-  resetButton: {
+  secondaryButton: {
     backgroundColor: colors.card,
     borderRadius: radius.pill,
-    paddingVertical: 15,
+    paddingVertical: 16,
     alignItems: "center",
+    marginTop: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 10,
   },
-  resetButtonText: {
+  secondaryButtonText: {
     color: colors.textSecondary,
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
-  clearButton: {
-    backgroundColor: "rgba(255, 107, 107, 0.1)",
+  dangerButton: {
     borderRadius: radius.pill,
-    paddingVertical: 15,
+    paddingVertical: 16,
     alignItems: "center",
+    marginTop: 12,
     borderWidth: 1,
     borderColor: colors.danger,
   },
-  clearButtonText: {
+  dangerButtonText: {
     color: colors.danger,
     fontSize: 15,
     fontWeight: "900",

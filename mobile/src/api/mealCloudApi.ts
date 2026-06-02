@@ -114,6 +114,52 @@ export async function loadCloudMeals() {
   };
 }
 
+export async function loadTodayCloudMeals() {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return {
+      ok: false,
+      message: "Sign in to load today's cloud meals.",
+      meals: [] as CloudMeal[],
+    };
+  }
+
+  const now = new Date();
+  const startOfDay = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+  const endOfDay = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + 1
+  );
+
+  const { data, error } = await supabase
+    .from("meals")
+    .select("*")
+    .eq("user_id", userId)
+    .gte("meal_time", startOfDay.toISOString())
+    .lt("meal_time", endOfDay.toISOString())
+    .order("meal_time", { ascending: false });
+
+  if (error) {
+    return {
+      ok: false,
+      message: error.message,
+      meals: [] as CloudMeal[],
+    };
+  }
+
+  return {
+    ok: true,
+    message: "Today's cloud meals loaded.",
+    meals: (data || []) as CloudMeal[],
+  };
+}
+
 export async function deleteCloudMeal(mealId: string) {
   const userId = await getCurrentUserId();
 
