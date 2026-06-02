@@ -1,4 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  safeGetItem,
+  safeRemoveItem,
+  safeSetItem,
+} from "@/src/storage/safeStorage";
 
 const SCAN_USAGE_KEY = "nutrisnap_scan_usage_v1";
 const FREE_DAILY_SCAN_LIMIT = 3;
@@ -18,7 +22,7 @@ export function getFreeDailyScanLimit() {
 
 export async function loadTodayScanCount(): Promise<number> {
   try {
-    const storedValue = await AsyncStorage.getItem(SCAN_USAGE_KEY);
+    const storedValue = await safeGetItem(SCAN_USAGE_KEY);
 
     if (!storedValue) {
       return 0;
@@ -48,7 +52,7 @@ export async function incrementTodayScanCount(): Promise<number> {
       count: nextCount,
     };
 
-    await AsyncStorage.setItem(SCAN_USAGE_KEY, JSON.stringify(usage));
+    await safeSetItem(SCAN_USAGE_KEY, JSON.stringify(usage));
 
     return nextCount;
   } catch (error) {
@@ -59,7 +63,7 @@ export async function incrementTodayScanCount(): Promise<number> {
 
 export async function resetTodayScanCount() {
   try {
-    await AsyncStorage.removeItem(SCAN_USAGE_KEY);
+    await safeRemoveItem(SCAN_USAGE_KEY);
   } catch (error) {
     console.error("Failed to reset scan usage:", error);
   }
