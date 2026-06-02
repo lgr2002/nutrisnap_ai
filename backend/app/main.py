@@ -1,9 +1,12 @@
+import os
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import MealEstimateRequest, MealEstimateResponse
-from app.services.meal_estimator import estimate_meal
+from app.services.meal_estimator import estimate_meal, get_ai_mode
+from app.services.openai_meal_estimator import get_openai_model_name
 
 
 load_dotenv()
@@ -12,7 +15,7 @@ load_dotenv()
 app = FastAPI(
     title="NutriSnap AI Backend",
     description="Backend API for AI-powered calorie and macro estimation.",
-    version="0.2.0",
+    version="0.5.0",
 )
 
 app.add_middleware(
@@ -29,14 +32,22 @@ def root():
     return {
         "message": "NutriSnap AI backend is running",
         "status": "ok",
-        "version": "0.2.0",
+        "version": "0.5.0",
     }
 
 
 @app.get("/health")
 def health_check():
+    use_openai = os.getenv("USE_OPENAI", "false").lower() == "true"
+    has_api_key = bool(os.getenv("OPENAI_API_KEY"))
+
     return {
         "status": "healthy",
+        "version": "0.5.0",
+        "use_openai": use_openai,
+        "ai_mode": get_ai_mode(),
+        "openai_model": get_openai_model_name(),
+        "openai_key_loaded": has_api_key,
     }
 
 
