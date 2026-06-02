@@ -1,33 +1,27 @@
 import { Platform } from "react-native";
 
 /**
- * Change this depending on your testing mode.
+ * API environment:
  *
  * local:
  * - Phone uses your laptop Wi-Fi IP.
  * - Browser uses 127.0.0.1.
  *
  * production:
- * - App uses deployed backend URL.
+ * - App uses deployed Render backend.
  */
-export const API_ENV = "local" as "local" | "production";
+export const API_ENV = "production" as "local" | "production";
 
 /**
  * Your laptop Wi-Fi IP address.
- *
- * To check on Windows:
- * ipconfig
- * Then find Wi-Fi IPv4 Address.
+ * Only used when API_ENV = "local".
  */
 const LAPTOP_IP_ADDRESS = "192.168.0.10";
 
 /**
- * Later, after deployment, replace this with your real backend URL.
- *
- * Example:
- * https://nutrisnap-ai-backend.onrender.com
+ * Deployed Render backend URL.
  */
-const PRODUCTION_API_BASE_URL = "https://replace-this-after-deployment.com";
+const PRODUCTION_API_BASE_URL = "https://nutrisnap-ai-akgy.onrender.com";
 
 const LOCAL_API_BASE_URL =
   Platform.OS === "web"
