@@ -21,6 +21,7 @@ import {
   SavedUserProfile,
 } from "@/src/storage/userProfileStorage";
 import { API_BASE_URL, API_CONFIG_LABEL, API_ENV } from "@/src/api/config";
+import { checkSupabaseConnection } from "@/src/api/supabaseClient";
 import {
   resetPremiumStatus,
   getPremiumStatus,
@@ -29,6 +30,11 @@ import { resetTodayScanCount } from "@/src/storage/scanUsageStorage";
 
 export default function ProfileScreen() {
   const [isPremium, setIsPremium] = useState(false);
+
+  const [supabaseStatus, setSupabaseStatus] = useState({
+    ok: false,
+    message: "Not checked yet.",
+  });
 
   const [profile, setProfile] = useState<SavedUserProfile>({
     name: mockUser.name,
@@ -65,6 +71,9 @@ export default function ProfileScreen() {
       }
 
       setIsPremium(premiumStatus);
+
+      const connectionStatus = await checkSupabaseConnection();
+      setSupabaseStatus(connectionStatus);
     };
 
     loadProfileData();
@@ -245,6 +254,19 @@ export default function ProfileScreen() {
           </View>
 
           <Text style={styles.apiUrlText}>{API_BASE_URL}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Cloud Sync</Text>
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Supabase</Text>
+            <Text style={styles.rowValue}>
+              {supabaseStatus.ok ? "Connected" : "Not connected"}
+            </Text>
+          </View>
+
+          <Text style={styles.apiUrlText}>{supabaseStatus.message}</Text>
         </View>
 
         <View style={styles.card}>
