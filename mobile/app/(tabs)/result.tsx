@@ -26,6 +26,8 @@ type ResultEstimate = {
   confidence: string;
   explanation: string;
   source: string;
+  modeLabel: string;
+  modeDescription: string;
 };
 
 function formatEstimateSource(source?: string) {
@@ -43,15 +45,51 @@ function formatEstimateSource(source?: string) {
     return `OpenAI · ${modelName}`;
   }
 
-  if (source === "openai") {
-    return "OpenAI";
-  }
-
   if (source === "rule_fallback") {
     return "Backend fallback";
   }
 
   return source;
+}
+
+function getModeCopy(source: string) {
+  if (source.startsWith("OpenAI Vision")) {
+    return {
+      modeLabel: "Photo AI used",
+      modeDescription:
+        "The estimate used your meal photo and description. This is more useful for visible portions, drinks, sauces and sides, but costs more API credits.",
+    };
+  }
+
+  if (source.startsWith("OpenAI")) {
+    return {
+      modeLabel: "Text AI used",
+      modeDescription:
+        "The estimate used your written meal description only. This is faster and cheaper than photo AI.",
+    };
+  }
+
+  if (source === "Backend fallback") {
+    return {
+      modeLabel: "Fallback estimate used",
+      modeDescription:
+        "The backend used the local fallback estimator instead of OpenAI. This avoids API cost but is less flexible.",
+    };
+  }
+
+  if (source === "Local fallback") {
+    return {
+      modeLabel: "Local fallback used",
+      modeDescription:
+        "The app could not reach the backend, so it used a local placeholder estimate.",
+    };
+  }
+
+  return {
+    modeLabel: "Estimate generated",
+    modeDescription:
+      "Review this estimate before saving. AI nutrition estimates are approximate.",
+  };
 }
 
 function getMimeTypeFromUri() {
@@ -66,13 +104,7 @@ async function imageUriToBase64(imageUri: string) {
   try {
     const manipulatedImage = await ImageManipulator.manipulateAsync(
       imageUri,
-      [
-        {
-          resize: {
-            width: 900,
-          },
-        },
-      ],
+      [{ resize: { width: 900 } }],
       {
         compress: 0.75,
         format: ImageManipulator.SaveFormat.JPEG,
@@ -123,6 +155,9 @@ export default function MealResultScreen() {
         params.editedFat;
 
       if (hasManualEdit) {
+        const source = params.source || "Edited";
+        const modeCopy = getModeCopy(source);
+
         setEstimate({
           calories: Number(params.editedCalories || 0),
           protein: Number(params.editedProtein || 0),
@@ -133,7 +168,8 @@ export default function MealResultScreen() {
           explanation:
             params.explanation ||
             "This estimate was manually edited by the user.",
-          source: params.source || "Edited",
+          source,
+          ...modeCopy,
         });
 
         setIsLoading(false);
@@ -153,6 +189,9 @@ export default function MealResultScreen() {
             image_mime_type: imageBase64 ? getMimeTypeFromUri() : undefined,
           });
 
+        const formattedSource = formatEstimateSource(backendEstimate.source);
+        const modeCopy = getModeCopy(formattedSource);
+
         setEstimate({
           calories: backendEstimate.calories,
           protein: backendEstimate.protein_g,
@@ -161,10 +200,12 @@ export default function MealResultScreen() {
           calorieRange: backendEstimate.calorie_range,
           confidence: backendEstimate.confidence,
           explanation: backendEstimate.explanation,
-          source: formatEstimateSource(backendEstimate.source),
+          source: formattedSource,
+          ...modeCopy,
         });
       } catch (error) {
         const localEstimate = estimateMealFromDescription(combinedDescription);
+        const modeCopy = getModeCopy("Local fallback");
 
         setBackendError(
           "Backend unavailable. Showing local placeholder estimate."
@@ -179,6 +220,7 @@ export default function MealResultScreen() {
           confidence: localEstimate.confidence,
           explanation: localEstimate.explanation,
           source: "Local fallback",
+          ...modeCopy,
         });
       } finally {
         setIsLoading(false);
@@ -252,14 +294,16 @@ export default function MealResultScreen() {
           <View style={styles.loadingCard}>
             <Text style={styles.loadingStep}>✓ Reading meal description</Text>
             <Text style={styles.loadingStep}>
-              {imageUri ? "✓ Reading food photo" : "✓ No photo attached"}
+              {imageUri ? "✓ Preparing photo for AI" : "✓ Text-only estimate"}
             </Text>
-            <Text style={styles.loadingStep}>✓ Checking AI estimate</Text>
-            <Text style={styles.loadingStep}>✓ Calculating macros</Text>
+            <Text style={styles.loadingStep}>✓ Checking backend AI</Text>
+            <Text style={styles.loadingStep}>✓ Calculating calories and macros</Text>
           </View>
 
           <Text style={styles.loadingText}>
-            Photo estimates can take a little longer.
+            {imageUri
+              ? "Photo AI can take longer and uses more API credits."
+              : "Text estimates are usually faster and cheaper."}
           </Text>
         </View>
       </SafeAreaView>
@@ -275,10 +319,7 @@ export default function MealResultScreen() {
             <Text style={styles.subtitle}>Review before saving.</Text>
           </View>
 
-          <TouchableOpacity
-            style={styles.closeCircle}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={styles.closeCircle} onPress={() => router.back()}>
             <Text style={styles.closeText}>×</Text>
           </TouchableOpacity>
         </View>
@@ -333,6 +374,11 @@ export default function MealResultScreen() {
           </View>
         </View>
 
+        <View style={styles.aiModeCard}>
+          <Text style={styles.aiModeLabel}>{estimate.modeLabel}</Text>
+          <Text style={styles.aiModeText}>{estimate.modeDescription}</Text>
+        </View>
+
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Macros</Text>
 
@@ -374,15 +420,8 @@ export default function MealResultScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    padding: spacing.screen,
-  },
+  screen: { flex: 1, backgroundColor: colors.background },
+  loadingContainer: { flex: 1, justifyContent: "center", padding: spacing.screen },
   loadingTitle: {
     color: colors.textPrimary,
     fontSize: 30,
@@ -409,10 +448,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 20,
   },
-  container: {
-    padding: spacing.screen,
-    paddingBottom: spacing.bottomSafe,
-  },
+  container: { padding: spacing.screen, paddingBottom: spacing.bottomSafe },
   header: {
     marginTop: 12,
     marginBottom: 24,
@@ -420,11 +456,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  title: {
-    color: colors.textPrimary,
-    fontSize: 30,
-    fontWeight: "900",
-  },
+  title: { color: colors.textPrimary, fontSize: 30, fontWeight: "900" },
   subtitle: {
     color: colors.textSecondary,
     fontSize: 15,
@@ -441,11 +473,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  closeText: {
-    color: colors.textPrimary,
-    fontSize: 26,
-    marginTop: -2,
-  },
+  closeText: { color: colors.textPrimary, fontSize: 26, marginTop: -2 },
   errorCard: {
     backgroundColor: "rgba(255, 176, 32, 0.12)",
     borderRadius: radius.large,
@@ -470,10 +498,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     position: "relative",
   },
-  foodImage: {
-    width: "100%",
-    height: "100%",
-  },
+  foodImage: { width: "100%", height: "100%" },
   photoBadge: {
     position: "absolute",
     bottom: 14,
@@ -524,16 +549,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-  calorieBlock: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    marginBottom: 18,
-  },
-  bigNumber: {
-    color: colors.textPrimary,
-    fontSize: 66,
-    fontWeight: "900",
-  },
+  calorieBlock: { flexDirection: "row", alignItems: "flex-end", marginBottom: 18 },
+  bigNumber: { color: colors.textPrimary, fontSize: 66, fontWeight: "900" },
   kcalText: {
     color: colors.textSecondary,
     fontSize: 22,
@@ -541,22 +558,14 @@ const styles = StyleSheet.create({
     marginBottom: 11,
     marginLeft: 8,
   },
-  badgeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   rangeBadge: {
     backgroundColor: colors.border,
     borderRadius: radius.pill,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
-  badgeText: {
-    color: colors.textPrimary,
-    fontSize: 13,
-    fontWeight: "800",
-  },
+  badgeText: { color: colors.textPrimary, fontSize: 13, fontWeight: "800" },
   confidenceBadge: {
     backgroundColor: "#2C2415",
     borderRadius: radius.pill,
@@ -565,10 +574,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.warning,
   },
-  confidenceText: {
+  confidenceText: { color: colors.warning, fontSize: 13, fontWeight: "900" },
+  aiModeCard: {
+    backgroundColor: "rgba(255, 176, 32, 0.1)",
+    borderRadius: radius.xl,
+    padding: spacing.card,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  aiModeLabel: {
     color: colors.warning,
     fontSize: 13,
     fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  aiModeText: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 22,
   },
   card: {
     backgroundColor: colors.card,
@@ -589,16 +616,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  macroLabel: {
-    color: colors.textSecondary,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  macroValue: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "900",
-  },
+  macroLabel: { color: colors.textSecondary, fontSize: 16, fontWeight: "700" },
+  macroValue: { color: colors.textPrimary, fontSize: 16, fontWeight: "900" },
   explanationCard: {
     backgroundColor: colors.card,
     borderRadius: radius.xl,
@@ -632,22 +651,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  editButtonText: {
-    color: colors.textPrimary,
-    fontSize: 17,
-    fontWeight: "900",
-  },
+  editButtonText: { color: colors.textPrimary, fontSize: 17, fontWeight: "900" },
   saveButton: {
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
     paddingVertical: 18,
     alignItems: "center",
   },
-  saveButtonText: {
-    color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: "900",
-  },
+  saveButtonText: { color: colors.textPrimary, fontSize: 18, fontWeight: "900" },
   disclaimer: {
     color: colors.textSecondary,
     textAlign: "center",

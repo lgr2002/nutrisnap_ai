@@ -142,6 +142,7 @@ export default function ScanMealScreen() {
   };
 
   const canEstimate = description.trim().length > 0 || !!imageUri;
+  const usingPhotoAI = Boolean(imageUri);
 
   if (isLoadingUsage) {
     return (
@@ -168,7 +169,7 @@ export default function ScanMealScreen() {
         </View>
 
         <View style={styles.limitCard}>
-          <View>
+          <View style={styles.limitTextWrap}>
             <Text style={styles.limitLabel}>
               {isPremium ? "Premium active" : "Free plan"}
             </Text>
@@ -180,7 +181,10 @@ export default function ScanMealScreen() {
           </View>
 
           {!isPremium ? (
-            <TouchableOpacity style={styles.upgradeMiniButton} onPress={() => router.push("/paywall")}>
+            <TouchableOpacity
+              style={styles.upgradeMiniButton}
+              onPress={() => router.push("/paywall")}
+            >
               <Text style={styles.upgradeMiniText}>Upgrade</Text>
             </TouchableOpacity>
           ) : null}
@@ -194,7 +198,7 @@ export default function ScanMealScreen() {
               <Text style={styles.cameraIcon}>📷</Text>
               <Text style={styles.uploadTitle}>Take or upload food photo</Text>
               <Text style={styles.uploadSubtitle}>
-                Add a clear photo for a better estimate.
+                Photo AI can estimate visible portions, sauces, drinks and sides.
               </Text>
             </>
           )}
@@ -214,6 +218,17 @@ export default function ScanMealScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
+
+        <View style={styles.aiModeCard}>
+          <Text style={styles.aiModeLabel}>
+            {usingPhotoAI ? "Photo AI estimate" : "Text AI estimate"}
+          </Text>
+          <Text style={styles.aiModeText}>
+            {usingPhotoAI
+              ? "Photo estimates use more API credits and may take longer, but they can improve portion and item recognition."
+              : "Text-only estimates are faster and cheaper. Add a photo when portion size or food type is hard to describe."}
+          </Text>
+        </View>
 
         <View style={styles.formSection}>
           <Text style={styles.label}>Quick description</Text>
@@ -262,7 +277,11 @@ export default function ScanMealScreen() {
           disabled={!canEstimate}
         >
           <Text style={styles.estimateButtonText}>
-            {!isPremium && scansRemaining === 0 ? "Unlock More Scans" : "Estimate Meal"}
+            {!isPremium && scansRemaining === 0
+              ? "Unlock More Scans"
+              : usingPhotoAI
+                ? "Estimate with Photo AI"
+                : "Estimate Meal"}
           </Text>
         </TouchableOpacity>
 
@@ -273,7 +292,8 @@ export default function ScanMealScreen() {
         <View style={styles.tipCard}>
           <Text style={styles.tipLabel}>Accuracy Tip</Text>
           <Text style={styles.tipText}>
-            Photo + short description gives better results than photo only.
+            Best result: clear photo + short description + important details like
+            sauce, oil, drink, or portion size.
           </Text>
         </View>
       </ScrollView>
@@ -345,6 +365,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  limitTextWrap: {
+    flex: 1,
+  },
   limitLabel: {
     color: colors.secondary,
     fontSize: 12,
@@ -408,7 +431,7 @@ const styles = StyleSheet.create({
   photoActionRow: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 20,
+    marginBottom: 14,
   },
   photoAction: {
     flex: 1,
@@ -437,6 +460,28 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 14,
     fontWeight: "900",
+  },
+  aiModeCard: {
+    backgroundColor: "rgba(255, 176, 32, 0.1)",
+    borderRadius: radius.large,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    marginBottom: 20,
+  },
+  aiModeLabel: {
+    color: colors.warning,
+    fontSize: 13,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  aiModeText: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 21,
   },
   formSection: {
     marginBottom: 18,
