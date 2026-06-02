@@ -1,0 +1,13 @@
+# Secrets
+.env
+backend/.env
+
+# Python backend
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
