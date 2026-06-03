@@ -1,50 +1,55 @@
-import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
-import {
-  IS_SUPABASE_CONFIGURED,
-  SUPABASE_ANON_KEY,
-  SUPABASE_URL,
-} from "@/src/api/supabaseConfig";
+import { Platform } from "react-native";
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const supabaseUrl = "https://dydhxjivsxexalzojiih.supabase.co";
+const supabaseAnonKey = "sb_publishable_zbk6Q-cbgN1B_MQiOSwr-Q_nnmKfvAR";
+
+const memoryStorage = {
+  storage: new Map<string, string>(),
+
+  async getItem(key: string) {
+    return this.storage.get(key) ?? null;
+  },
+
+  async setItem(key: string, value: string) {
+    this.storage.set(key, value);
+  },
+
+  async removeItem(key: string) {
+    this.storage.delete(key);
+  },
+};
+
+function getSupabaseStorage() {
+  if (Platform.OS !== "web") {
+    return AsyncStorage;
+  }
+
+  if (typeof window !== "undefined" && window.localStorage) {
+    return {
+      async getItem(key: string) {
+        return window.localStorage.getItem(key);
+      },
+
+      async setItem(key: string, value: string) {
+        window.localStorage.setItem(key, value);
+      },
+
+      async removeItem(key: string) {
+        window.localStorage.removeItem(key);
+      },
+    };
+  }
+
+  return memoryStorage;
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
-    persistSession: true,
+    storage: getSupabaseStorage(),
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    persistSession: true,
+    detectSessionInUrl: Platform.OS === "web",
   },
 });
-
-export async function checkSupabaseConnection() {
-  if (!IS_SUPABASE_CONFIGURED) {
-    return {
-      ok: false,
-      message: "Supabase is not configured yet.",
-    };
-  }
-
-  try {
-    const { error } = await supabase.auth.getSession();
-
-    if (error) {
-      return {
-        ok: false,
-        message: error.message,
-      };
-    }
-
-    return {
-      ok: true,
-      message: "Supabase client is connected.",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      message:
-        error instanceof Error
-          ? error.message
-          : "Could not connect to Supabase.",
-    };
-  }
-}
