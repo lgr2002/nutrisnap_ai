@@ -15,7 +15,11 @@ import {
 import { colors, radius, spacing } from "@/src/theme";
 import { mockTargets, mockUser } from "@/src/data/mockData";
 import { hasCompletedOnboarding } from "@/src/storage/onboardingStorage";
-import { CloudMeal, deleteCloudMeal, loadTodayCloudMeals } from "@/src/api/mealCloudApi";
+import {
+  CloudMeal,
+  deleteCloudMeal,
+  loadCloudMealsByDate,
+} from "@/src/api/mealCloudApi";
 
 type LocalMeal = {
   id: string;
@@ -29,11 +33,37 @@ type LocalMeal = {
   source: "local" | "cloud";
 };
 
-function getTodayLabel() {
-  return new Date().toLocaleDateString(undefined, {
+function getStartOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getDateKey(date: Date) {
+  return getStartOfDay(date).toISOString();
+}
+
+function isSameDay(firstDate: Date, secondDate: Date) {
+  return getDateKey(firstDate) === getDateKey(secondDate);
+}
+
+function formatSelectedDateLabel(date: Date) {
+  if (isSameDay(date, new Date())) {
+    return "Today";
+  }
+
+  return date.toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
+  });
+}
+
+function getDateSelectorDays() {
+  const today = getStartOfDay(new Date());
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - index);
+    return date;
   });
 }
 
@@ -80,26 +110,40 @@ export default function HomeScreen() {
   const [isLoadingCloudMeals, setIsLoadingCloudMeals] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [cloudStatusMessage, setCloudStatusMessage] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() =>
+    getStartOfDay(new Date())
+  );
   const [handledSavedMealId, setHandledSavedMealId] = useState<string | null>(
     null
   );
 
-  const loadMeals = async (refreshing = false) => {
-    if (refreshing) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoadingCloudMeals(true);
-    }
+  const selectedDateLabel = formatSelectedDateLabel(selectedDate);
+  const dateSelectorDays = useMemo(() => getDateSelectorDays(), []);
 
-    const result = await loadTodayCloudMeals();
+  const loadMeals = useCallback(
+    async (refreshing = false, date = selectedDate) => {
+      if (refreshing) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoadingCloudMeals(true);
+      }
 
-    if (result.ok) {
-      setMeals(result.meals.map(cloudMealToLocalMeal));
-    }
+      const result = await loadCloudMealsByDate(date);
 
-    setCloudStatusMessage(result.message);
-    setIsLoadingCloudMeals(false);
-    setIsRefreshing(false);
+      if (result.ok) {
+        setMeals(result.meals.map(cloudMealToLocalMeal));
+      }
+
+      setCloudStatusMessage(result.message);
+      setIsLoadingCloudMeals(false);
+      setIsRefreshing(false);
+    },
+    [selectedDate]
+  );
+
+  const handleSelectDate = (date: Date) => {
+    const nextDate = getStartOfDay(date);
+    setSelectedDate(nextDate);
   };
 
   useFocusEffect(
@@ -116,7 +160,7 @@ export default function HomeScreen() {
       };
 
       checkOnboardingAndLoad();
-    }, [])
+    }, [loadMeals])
   );
 
   useFocusEffect(
@@ -127,8 +171,11 @@ export default function HomeScreen() {
 
       setHandledSavedMealId(params.savedMealId);
 
+      const today = getStartOfDay(new Date());
+      setSelectedDate(today);
+
       if (params.cloudSaveStatus === "saved") {
-        loadMeals();
+        loadMeals(false, today);
         return;
       }
 
@@ -166,6 +213,7 @@ export default function HomeScreen() {
       params.savedMealConfidence,
       params.cloudSaveStatus,
       handledSavedMealId,
+      loadMeals,
     ])
   );
 
@@ -210,32 +258,38 @@ export default function HomeScreen() {
       return;
     }
 
-    Alert.alert("Delete meal?", `Remove ${meal.name} from today?`, [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: removeMeal,
-      },
-    ]);
+    Alert.alert(
+      "Delete meal?",
+      `Remove ${meal.name} from ${selectedDateLabel.toLowerCase()}?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: removeMeal,
+        },
+      ]
+    );
   };
 
   const aiInsight =
     totals.calories === 0
-      ? "Start by scanning or typing your first meal today."
+      ? selectedDateLabel === "Today"
+        ? "Start by scanning or typing your first meal today."
+        : "No meals logged for this day yet."
       : totals.protein < mockTargets.protein * 0.5
-        ? "Protein is still low today. Add chicken, eggs, Greek yoghurt or tofu later."
-        : "You are making progress today. Keep logging meals for better coaching.";
+        ? "Protein is still low for this day. Add chicken, eggs, Greek yoghurt or tofu later."
+        : "You are making progress. Keep logging meals for better coaching.";
 
   if (isLoadingCloudMeals) {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={styles.loadingText}>Loading today’s meals...</Text>
+          <Text style={styles.loadingText}>Loading meals...</Text>
         </View>
       </SafeAreaView>
     );
@@ -260,11 +314,52 @@ export default function HomeScreen() {
     ? "Good evening"
     : `Good evening, ${mockUser.name}`}
 </Text>
-            <Text style={styles.dateText}>Today · {getTodayLabel()}</Text>
+            <Text style={styles.dateText}>{selectedDateLabel}</Text>
           </View>
 
           <View style={styles.statusDot} />
         </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.dateSelector}
+        >
+          {dateSelectorDays.map((date) => {
+            const isSelected = isSameDay(date, selectedDate);
+            const isToday = isSameDay(date, new Date());
+
+            return (
+              <TouchableOpacity
+                key={getDateKey(date)}
+                style={[styles.dateButton, isSelected && styles.dateButtonActive]}
+                onPress={() => handleSelectDate(date)}
+              >
+                <Text
+                  style={[
+                    styles.dateButtonDay,
+                    isSelected && styles.dateButtonTextActive,
+                  ]}
+                >
+                  {isToday
+                    ? "Today"
+                    : date.toLocaleDateString(undefined, { weekday: "short" })}
+                </Text>
+                <Text
+                  style={[
+                    styles.dateButtonDate,
+                    isSelected && styles.dateButtonTextActive,
+                  ]}
+                >
+                  {date.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
         <View style={styles.energyCard}>
           <Text style={styles.energyLabel}>Daily Energy</Text>
@@ -323,7 +418,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.cloudCard}>
-          <Text style={styles.cloudLabel}>Cloud Sync</Text>
+          <Text style={styles.cloudLabel}>Sync Status</Text>
           <Text style={styles.cloudText}>
   {cloudStatusMessage.toLowerCase().startsWith("sign in")
     ? "Sign in from Profile to sync meals across devices."
@@ -332,7 +427,9 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.mealsHeader}>
-          <Text style={styles.sectionTitle}>Meals Today</Text>
+          <Text style={styles.sectionTitle}>
+            {selectedDateLabel === "Today" ? "Meals Today" : "Meals"}
+          </Text>
           <Text style={styles.mealCount}>{meals.length} meal</Text>
         </View>
 
@@ -340,7 +437,9 @@ export default function HomeScreen() {
           <View style={styles.emptyMealCard}>
             <Text style={styles.emptyMealTitle}>No meals logged yet</Text>
             <Text style={styles.emptyMealText}>
-              Scan or type your first meal to start tracking today.
+              {selectedDateLabel === "Today"
+                ? "Scan or type your first meal to start tracking today."
+                : "No meals were logged for this day."}
             </Text>
           </View>
         ) : (
@@ -430,6 +529,38 @@ const styles = StyleSheet.create({
     backgroundColor: colors.secondary,
     borderWidth: 5,
     borderColor: colors.card,
+  },
+  dateSelector: {
+    gap: 10,
+    paddingBottom: 18,
+  },
+  dateButton: {
+    minWidth: 76,
+    backgroundColor: colors.card,
+    borderRadius: radius.large,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  dateButtonActive: {
+    backgroundColor: colors.cardAlt,
+    borderColor: colors.primary,
+  },
+  dateButtonDay: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+  dateButtonDate: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  dateButtonTextActive: {
+    color: colors.textPrimary,
   },
   energyCard: {
     backgroundColor: colors.cardAlt,

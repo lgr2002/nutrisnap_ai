@@ -69,7 +69,7 @@ export async function saveMealToCloud(input: CloudMealInput) {
     if (!userId) {
       return {
         ok: false,
-        message: "Sign in to save meals to cloud.",
+        message: "Sign in to sync saved meals.",
         mealId: null,
       };
     }
@@ -102,14 +102,14 @@ export async function saveMealToCloud(input: CloudMealInput) {
 
     return {
       ok: true,
-      message: "Meal saved to cloud.",
+      message: "Meal saved.",
       mealId: data.id as string,
     };
   } catch (error) {
     return {
       ok: false,
       message:
-        error instanceof Error ? error.message : "Meal could not be saved to cloud.",
+        error instanceof Error ? error.message : "Meal could not be saved.",
       mealId: null,
     };
   }
@@ -122,7 +122,7 @@ export async function loadCloudMeals() {
     if (!userId) {
       return {
         ok: false,
-        message: "Sign in to view cloud meal history.",
+        message: "Sign in to view meal history.",
         meals: [] as CloudMeal[],
       };
     }
@@ -143,51 +143,58 @@ export async function loadCloudMeals() {
 
     return {
       ok: true,
-      message: "Cloud meals loaded.",
+      message: "Meals loaded.",
       meals: (data || []) as CloudMeal[],
     };
   } catch (error) {
     return {
       ok: false,
       message:
-        error instanceof Error ? error.message : "Cloud meals could not be loaded.",
+        error instanceof Error ? error.message : "Meals could not be loaded.",
       meals: [] as CloudMeal[],
     };
   }
 }
 
-export async function loadTodayCloudMeals() {
+function getDayRange(selectedDate: Date) {
+  const startOfDay = new Date(
+    selectedDate.getFullYear(),
+    selectedDate.getMonth(),
+    selectedDate.getDate()
+  );
+
+  const startOfNextDay = new Date(
+    selectedDate.getFullYear(),
+    selectedDate.getMonth(),
+    selectedDate.getDate() + 1
+  );
+
+  return {
+    startOfDay,
+    startOfNextDay,
+  };
+}
+
+export async function loadCloudMealsByDate(selectedDate: Date) {
   try {
     const userId = await getCurrentUserId();
 
     if (!userId) {
       return {
         ok: false,
-        message: "Sign in to load today's cloud meals.",
+        message: "Sign in to load meals for this day.",
         meals: [] as CloudMeal[],
       };
     }
 
-    const now = new Date();
-
-    const startOfDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-
-    const endOfDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 1
-    );
+    const { startOfDay, startOfNextDay } = getDayRange(selectedDate);
 
     const { data, error } = await supabase
       .from("meals")
       .select("*")
       .eq("user_id", userId)
       .gte("meal_time", startOfDay.toISOString())
-      .lt("meal_time", endOfDay.toISOString())
+      .lt("meal_time", startOfNextDay.toISOString())
       .order("meal_time", { ascending: false });
 
     if (error) {
@@ -200,7 +207,7 @@ export async function loadTodayCloudMeals() {
 
     return {
       ok: true,
-      message: "Today's cloud meals loaded.",
+      message: "Meals loaded.",
       meals: (data || []) as CloudMeal[],
     };
   } catch (error) {
@@ -209,10 +216,14 @@ export async function loadTodayCloudMeals() {
       message:
         error instanceof Error
           ? error.message
-          : "Today's cloud meals could not be loaded.",
+          : "Meals for this day could not be loaded.",
       meals: [] as CloudMeal[],
     };
   }
+}
+
+export async function loadTodayCloudMeals() {
+  return loadCloudMealsByDate(new Date());
 }
 
 export async function deleteCloudMeal(mealId: string) {
@@ -222,7 +233,7 @@ export async function deleteCloudMeal(mealId: string) {
     if (!userId) {
       return {
         ok: false,
-        message: "Sign in to delete cloud meals.",
+        message: "Sign in to delete synced meals.",
       };
     }
 
