@@ -21,8 +21,8 @@ export default function PaywallScreen() {
           <Text style={styles.badge}>Premium coming soon</Text>
           <Text style={styles.title}>More tracking tools are on the way</Text>
           <Text style={styles.subtitle}>
-            Free users get 3 AI scans per day during friends testing. Premium
-            features are not available to purchase yet.
+            Free users get 3 AI scans per day. Premium features are not
+            available to purchase yet.
           </Text>
         </View>
 
@@ -80,7 +80,7 @@ export default function PaywallScreen() {
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          Purchases and subscriptions are not enabled in this test version.
+          Purchases and subscriptions are not enabled yet.
         </Text>
       </ScrollView>
     </SafeAreaView>

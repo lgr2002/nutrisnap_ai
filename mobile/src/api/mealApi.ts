@@ -35,7 +35,7 @@ export class BackendRequestError extends Error {
 function getFriendlyBackendError(error: unknown) {
   if (error instanceof BackendRequestError) {
     if (error.status === 500) {
-      return "The AI backend had an internal error. Try again in a moment.";
+      return "The AI estimate could not be completed. Try again in a moment.";
     }
 
     if (error.status === 413) {
@@ -50,12 +50,10 @@ function getFriendlyBackendError(error: unknown) {
   }
 
   if (error instanceof TypeError) {
-    return (
-      "Could not reach the backend. If this is the first request, the free server may still be waking up."
-    );
+    return "Could not connect to the estimate service. Check your connection and try again.";
   }
 
-  return "Something went wrong while contacting the backend.";
+  return "Something went wrong while preparing your estimate.";
 }
 
 export async function estimateMealWithBackend(

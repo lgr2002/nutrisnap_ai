@@ -20,6 +20,9 @@ import {
 } from "@/src/api/mealApi";
 import { saveMealToCloud } from "@/src/api/mealCloudApi";
 
+const BACKEND_IMAGE_MAX_WIDTH = 768;
+const BACKEND_IMAGE_JPEG_QUALITY = 0.55;
+
 type ResultEstimate = {
   calories: number;
   protein: number;
@@ -115,9 +118,9 @@ async function imageUriToBase64(imageUri: string) {
   try {
     const manipulatedImage = await ImageManipulator.manipulateAsync(
       imageUri,
-      [{ resize: { width: 900 } }],
+      [{ resize: { width: BACKEND_IMAGE_MAX_WIDTH } }],
       {
-        compress: 0.75,
+        compress: BACKEND_IMAGE_JPEG_QUALITY,
         format: ImageManipulator.SaveFormat.JPEG,
         base64: true,
       }
@@ -276,7 +279,7 @@ export default function MealResultScreen() {
           calorieRange: localEstimate.calorieRange,
           confidence: localEstimate.confidence,
           explanation: localEstimate.explanation,
-          source: "Local fallback",
+          source: "local_estimate",
           estimateLabel,
           ...modeCopy,
         });
