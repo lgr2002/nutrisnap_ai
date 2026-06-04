@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -8,33 +10,90 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
-import { mockMeals, mockTargets, mockUser } from "@/src/data/mockData";
-import { loadMealsFromStorage, StoredMeal } from "@/src/storage/mealStorage";
+import { mockTargets, mockUser } from "@/src/data/mockData";
 import {
   loadNutritionTargets,
   loadUserProfile,
   SavedNutritionTargets,
   SavedUserProfile,
 } from "@/src/storage/userProfileStorage";
-import {
-  buildCoachInsight,
-  calculateDailyTotals,
-  getCalorieProgressPercent,
-  getRemainingCalories,
-} from "@/src/utils/nutritionSummary";
+import { CloudMeal, loadTodayCloudMeals } from "@/src/api/mealCloudApi";
+
+type CoachTotals = {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+};
+
+function calculateCloudTotals(meals: CloudMeal[]): CoachTotals {
+  return meals.reduce(
+    (acc, meal) => ({
+      calories: acc.calories + meal.calories,
+      protein: acc.protein + meal.protein_g,
+      carbs: acc.carbs + meal.carbs_g,
+      fat: acc.fat + meal.fat_g,
+    }),
+    {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+    }
+  );
+}
+
+function getRemainingCalories(totals: CoachTotals, targets: SavedNutritionTargets) {
+  return Math.max(targets.calories - totals.calories, 0);
+}
+
+function getCalorieProgressPercent(
+  totals: CoachTotals,
+  targets: SavedNutritionTargets
+) {
+  if (targets.calories <= 0) {
+    return 0;
+  }
+
+  return Math.min((totals.calories / targets.calories) * 100, 100);
+}
+
+function buildCoachInsight(
+  totals: CoachTotals,
+  targets: SavedNutritionTargets,
+  mealCount: number
+) {
+  if (mealCount === 0) {
+    return "You have not logged any meals today. Add your first meal so I can give useful guidance.";
+  }
+
+  if (totals.calories > targets.calories) {
+    return "You are above your calorie target today. Keep the next meal lighter and focus on lean protein or fibre.";
+  }
+
+  if (totals.protein < targets.protein * 0.5) {
+    return "Protein is still low today. Try adding chicken, eggs, tuna, tofu or Greek yoghurt.";
+  }
+
+  if (totals.calories < targets.calories * 0.5) {
+    return "You are still well below your calorie target. A balanced meal with protein and carbs would fit well.";
+  }
+
+  return "You are tracking well today. Keep logging meals so the coach can stay accurate.";
+}
 
 function buildActionItems(
-  meals: StoredMeal[],
+  meals: CloudMeal[],
+  totals: CoachTotals,
   targets: SavedNutritionTargets
 ): string[] {
-  const totals = calculateDailyTotals(meals);
   const items: string[] = [];
 
   if (meals.length === 0) {
     return [
-      "Log one meal using Scan so the coach can give useful advice.",
-      "Add a short description with the photo for better estimates.",
-      "Set your target from onboarding before comparing progress.",
+      "Log one meal using Scan so the coach can calculate your day properly.",
+      "Use a clear photo or short description for better estimates.",
+      "Come back after saving a meal to get more specific advice.",
     ];
   }
 
@@ -63,17 +122,20 @@ function buildActionItems(
 }
 
 function buildMealSuggestion(
-  meals: StoredMeal[],
+  meals: CloudMeal[],
+  totals: CoachTotals,
   targets: SavedNutritionTargets
 ) {
-  const totals = calculateDailyTotals(meals);
+  if (meals.length === 0) {
+    return "Start with a normal meal: lean protein, carbs you can measure, and a vegetable or fruit side.";
+  }
 
   if (totals.calories > targets.calories) {
     return "Lean chicken salad, tuna bowl, egg whites, or Greek yoghurt would be safer tonight.";
   }
 
   if (totals.protein < targets.protein * 0.7) {
-    return "Chicken rice with controlled sauce, steak with vegetables, tuna sandwich, or protein shake with milk.";
+    return "Chicken rice with controlled sauce, steak with vegetables, tuna sandwich, or a protein shake.";
   }
 
   if (totals.fat > targets.fat * 0.85) {
@@ -84,8 +146,9 @@ function buildMealSuggestion(
 }
 
 export default function CoachScreen() {
-  const [meals, setMeals] = useState<StoredMeal[]>([]);
+  const [meals, setMeals] = useState<CloudMeal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [cloudStatusMessage, setCloudStatusMessage] = useState("");
 
   const [profile, setProfile] = useState<SavedUserProfile>({
     name: mockUser.name,
@@ -107,39 +170,44 @@ export default function CoachScreen() {
     fat: mockTargets.fat,
   });
 
-  useEffect(() => {
-    const loadCoachData = async () => {
-      const savedMeals = await loadMealsFromStorage();
-      const savedProfile = await loadUserProfile();
-      const savedTargets = await loadNutritionTargets();
+  const loadCoachData = async () => {
+    setIsLoading(true);
 
-      setMeals(savedMeals || mockMeals);
+    const savedProfile = await loadUserProfile();
+    const savedTargets = await loadNutritionTargets();
+    const cloudMealsResult = await loadTodayCloudMeals();
 
-      if (savedProfile) {
-        setProfile(savedProfile);
-      }
+    if (savedProfile) {
+      setProfile(savedProfile);
+    }
 
-      if (savedTargets) {
-        setTargets(savedTargets);
-      }
+    if (savedTargets) {
+      setTargets(savedTargets);
+    }
 
-      setIsLoading(false);
-    };
+    setMeals(cloudMealsResult.meals);
+    setCloudStatusMessage(cloudMealsResult.message);
+    setIsLoading(false);
+  };
 
-    loadCoachData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadCoachData();
+    }, [])
+  );
 
-  const totals = calculateDailyTotals(meals);
+  const totals = calculateCloudTotals(meals);
   const remainingCalories = getRemainingCalories(totals, targets);
   const calorieProgress = getCalorieProgressPercent(totals, targets);
   const insight = buildCoachInsight(totals, targets, meals.length);
-  const actionItems = buildActionItems(meals, targets);
-  const mealSuggestion = buildMealSuggestion(meals, targets);
+  const actionItems = buildActionItems(meals, totals, targets);
+  const mealSuggestion = buildMealSuggestion(meals, totals, targets);
 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.loadingContainer}>
+          <ActivityIndicator color={colors.primary} size="large" />
           <Text style={styles.loadingText}>Loading coach...</Text>
         </View>
       </SafeAreaView>
@@ -153,7 +221,7 @@ export default function CoachScreen() {
           <View>
             <Text style={styles.title}>AI Coach</Text>
             <Text style={styles.subtitle}>
-              Personal guidance from your saved meals and targets.
+              Guidance based on the meals you logged today.
             </Text>
           </View>
         </View>
@@ -178,7 +246,7 @@ export default function CoachScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Your Current Goal</Text>
+          <Text style={styles.sectionTitle}>Today at a glance</Text>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Goal</Text>
@@ -191,16 +259,16 @@ export default function CoachScreen() {
           </View>
 
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Meals logged</Text>
+            <Text style={styles.rowLabel}>Meals logged today</Text>
             <Text style={styles.rowValue}>{meals.length}</Text>
           </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Action Plan</Text>
+          <Text style={styles.sectionTitle}>Action plan</Text>
 
           {actionItems.map((item, index) => (
-            <View key={item} style={styles.actionItem}>
+            <View key={`${item}-${index}`} style={styles.actionItem}>
               <View style={styles.actionNumber}>
                 <Text style={styles.actionNumberText}>{index + 1}</Text>
               </View>
@@ -215,7 +283,7 @@ export default function CoachScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Macro Check</Text>
+          <Text style={styles.sectionTitle}>Macro check</Text>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Protein</Text>
@@ -239,13 +307,17 @@ export default function CoachScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>Ask Coach a Question</Text>
+        <View style={styles.cloudCard}>
+          <Text style={styles.cloudLabel}>Cloud Sync</Text>
+          <Text style={styles.cloudText}>{cloudStatusMessage}</Text>
+        </View>
+
+        <TouchableOpacity style={styles.primaryButton} onPress={loadCoachData}>
+          <Text style={styles.primaryButtonText}>Refresh Coach</Text>
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          Coach advice is general guidance only. Real personalised coaching will
-          improve when the AI backend and user database are connected.
+          Coach advice is general guidance only and nutrition estimates are approximate.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -266,6 +338,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 18,
     fontWeight: "800",
+    marginTop: 14,
   },
   container: {
     padding: spacing.screen,
@@ -412,6 +485,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     lineHeight: 24,
+  },
+  cloudCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing.card,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cloudLabel: {
+    color: colors.secondary,
+    fontSize: 13,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  cloudText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 20,
   },
   primaryButton: {
     backgroundColor: colors.primary,

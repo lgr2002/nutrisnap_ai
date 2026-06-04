@@ -255,7 +255,7 @@ export default function ScanMealScreen() {
               style={styles.upgradeMiniButton}
               onPress={() => router.push("/paywall")}
             >
-              <Text style={styles.upgradeMiniText}>Upgrade</Text>
+              <Text style={styles.upgradeMiniText}>Premium soon</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -366,7 +366,7 @@ export default function ScanMealScreen() {
         >
           <Text style={styles.estimateButtonText}>
             {!isPremium && scansRemaining === 0
-              ? "Unlock More Scans"
+              ? "Premium Coming Soon"
               : usingPhotoAI
                 ? "Estimate with Photo AI"
                 : "Estimate Meal"}

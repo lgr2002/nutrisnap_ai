@@ -163,7 +163,7 @@ export default function ProfileScreen() {
             <>
               <Text style={styles.cloudTitle}>Signed in</Text>
               <Text style={styles.cloudText}>
-                Signed in as {displayName}. Your saved meals can sync with Supabase.
+                Signed in as {displayName}. Your saved meals can sync across sessions.
               </Text>
 
               <TouchableOpacity
@@ -200,8 +200,8 @@ export default function ProfileScreen() {
           </Text>
           <Text style={styles.planText}>
             {isPremium
-              ? "Unlimited AI meal scans, advanced coaching, and premium features."
-              : "3 AI meal scans per day. Upgrade for unlimited scans, weekly reports and advanced coaching."}
+              ? "Premium access is active."
+              : "3 AI meal scans per day. Premium features are coming soon."}
           </Text>
 
           {!isPremium ? (
@@ -209,7 +209,7 @@ export default function ProfileScreen() {
               style={styles.primaryButton}
               onPress={() => router.push("/paywall")}
             >
-              <Text style={styles.primaryButtonText}>Upgrade to Premium</Text>
+              <Text style={styles.primaryButtonText}>Premium Coming Soon</Text>
             </TouchableOpacity>
           ) : null}
         </View>

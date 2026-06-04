@@ -72,7 +72,7 @@ export default function AuthScreen() {
         }
 
         setStatusMessage(
-          "Account created. Check your email if Supabase asks for confirmation, then sign in."
+          "Account created. Check your email if confirmation is required, then sign in."
         );
 
         showMessage(
@@ -179,8 +179,7 @@ export default function AuthScreen() {
         </View>
 
         <Text style={styles.note}>
-          This is the first auth step. Cloud meal sync will be connected in the next
-          batch.
+          Sign in to sync meals and profile data across sessions.
         </Text>
       </View>
     </SafeAreaView>

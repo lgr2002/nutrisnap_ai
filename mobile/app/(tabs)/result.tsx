@@ -18,7 +18,6 @@ import {
   BackendMealEstimateResponse,
   estimateMealWithBackend,
 } from "@/src/api/mealApi";
-import { API_CONFIG_LABEL } from "@/src/api/config";
 import { saveMealToCloud } from "@/src/api/mealCloudApi";
 
 type ResultEstimate = {
@@ -30,6 +29,7 @@ type ResultEstimate = {
   confidence: string;
   explanation: string;
   source: string;
+  estimateLabel: string;
   modeLabel: string;
   modeDescription: string;
 };
@@ -43,58 +43,56 @@ function showMessage(title: string, message: string) {
   Alert.alert(title, message);
 }
 
-function formatEstimateSource(source?: string) {
-  if (!source) {
-    return "Backend";
+function getEstimateLabel(source?: string, hasImage = false) {
+  if (source?.startsWith("openai_vision:")) {
+    return "Photo-assisted estimate";
   }
 
-  if (source.startsWith("openai_vision:")) {
-    const modelName = source.replace("openai_vision:", "");
-    return `OpenAI Vision · ${modelName}`;
+  if (source?.startsWith("openai:")) {
+    return "Text-based estimate";
   }
 
-  if (source.startsWith("openai:")) {
-    const modelName = source.replace("openai:", "");
-    return `OpenAI · ${modelName}`;
+  if (source === "Edited") {
+    return "Edited estimate";
   }
 
-  if (source === "rule_fallback") {
-    return "Backend fallback";
+  if (hasImage) {
+    return "Photo-assisted estimate";
   }
 
-  return source;
+  return "AI Estimate";
 }
 
 function getModeCopy(source: string) {
-  if (source.startsWith("OpenAI Vision")) {
+  if (source === "Photo-assisted estimate") {
     return {
-      modeLabel: "Photo AI used",
+      modeLabel: "Photo-assisted estimate",
       modeDescription:
-        "The estimate used your meal photo and description. This helps with visible portions, drinks, sauces and sides, but uses more API credits.",
+        "Review the calories and macros before saving. Photos can help with visible portions, drinks, sauces and sides.",
     };
   }
 
-  if (source.startsWith("OpenAI")) {
+  if (source === "Text-based estimate") {
     return {
-      modeLabel: "Text AI used",
+      modeLabel: "Text-based estimate",
       modeDescription:
-        "The estimate used your written meal description only. This is faster and cheaper than photo AI.",
+        "Review the calories and macros before saving. Add details like sauces, oils and drinks for better estimates.",
     };
   }
 
-  if (source === "Backend fallback") {
+  if (source === "Edited estimate") {
     return {
-      modeLabel: "Fallback estimate used",
+      modeLabel: "Edited estimate",
       modeDescription:
-        "The backend used the local fallback estimator instead of OpenAI. This avoids API cost but is less flexible.",
+        "Review your edited calories and macros before saving.",
     };
   }
 
-  if (source === "Local fallback") {
+  if (source === "AI Estimate") {
     return {
-      modeLabel: "Local fallback used",
+      modeLabel: "AI Estimate",
       modeDescription:
-        "The app could not reach the backend, so it used a local placeholder estimate.",
+        "Review this estimate before saving. AI nutrition estimates are approximate.",
     };
   }
 
@@ -137,6 +135,8 @@ export default function MealResultScreen() {
     mealName?: string;
     optionalDetails?: string;
     imageUri?: string;
+    portion?: string;
+    mealTimeLabel?: string;
     editedCalories?: string;
     editedProtein?: string;
     editedCarbs?: string;
@@ -150,7 +150,9 @@ export default function MealResultScreen() {
   const mealName = params.mealName || "Unknown meal";
   const optionalDetails = params.optionalDetails || "";
   const imageUri = params.imageUri || "";
-  const combinedDescription = `${mealName} ${optionalDetails}`.trim();
+  const portion = params.portion || "Whole meal";
+  const mealTimeLabel = params.mealTimeLabel || "Now";
+  const combinedDescription = `${mealName} ${optionalDetails} ${portion}`.trim();
 
   const hasLoadedRef = useRef(false);
 
@@ -162,7 +164,7 @@ export default function MealResultScreen() {
   const [loadingHint, setLoadingHint] = useState(
     imageUri
       ? "Preparing your photo for AI analysis..."
-      : "Sending your meal description to the AI backend..."
+      : "Preparing your meal description..."
   );
 
   useEffect(() => {
@@ -174,13 +176,13 @@ export default function MealResultScreen() {
 
     const hintTimer = setTimeout(() => {
       setLoadingHint(
-        "Still working. Free backend servers can take longer if they were asleep."
+        "Still working. Detailed estimates can take a little longer."
       );
     }, 8000);
 
     const coldStartTimer = setTimeout(() => {
       setLoadingHint(
-        "The production backend may be waking up. This can take 30–60 seconds on the free hosting plan."
+        "Thanks for waiting. Your estimate should be ready soon."
       );
     }, 18000);
 
@@ -196,7 +198,8 @@ export default function MealResultScreen() {
 
       if (hasManualEdit) {
         const source = params.source || "Edited";
-        const modeCopy = getModeCopy(source);
+        const estimateLabel = getEstimateLabel(source, Boolean(imageUri));
+        const modeCopy = getModeCopy(estimateLabel);
 
         setEstimate({
           calories: Number(params.editedCalories || 0),
@@ -209,6 +212,7 @@ export default function MealResultScreen() {
             params.explanation ||
             "This estimate was manually edited by the user.",
           source,
+          estimateLabel,
           ...modeCopy,
         });
 
@@ -231,14 +235,17 @@ export default function MealResultScreen() {
           await estimateMealWithBackend({
             meal_name: mealName,
             optional_details: optionalDetails,
-            portion: "Whole meal",
+            portion,
             image_attached: Boolean(imageUri),
             image_base64: imageBase64 || undefined,
             image_mime_type: imageBase64 ? getMimeTypeFromUri() : undefined,
           });
 
-        const formattedSource = formatEstimateSource(backendEstimate.source);
-        const modeCopy = getModeCopy(formattedSource);
+        const estimateLabel = getEstimateLabel(
+          backendEstimate.source,
+          Boolean(imageUri)
+        );
+        const modeCopy = getModeCopy(estimateLabel);
 
         setEstimate({
           calories: backendEstimate.calories,
@@ -248,17 +255,17 @@ export default function MealResultScreen() {
           calorieRange: backendEstimate.calorie_range,
           confidence: backendEstimate.confidence,
           explanation: backendEstimate.explanation,
-          source: formattedSource,
+          source: backendEstimate.source || "ai_estimate",
+          estimateLabel,
           ...modeCopy,
         });
-      } catch (error) {
+      } catch {
         const localEstimate = estimateMealFromDescription(combinedDescription);
-        const modeCopy = getModeCopy("Local fallback");
+        const estimateLabel = getEstimateLabel(undefined, Boolean(imageUri));
+        const modeCopy = getModeCopy(estimateLabel);
 
         setBackendError(
-          error instanceof Error
-            ? error.message
-            : "Backend unavailable. Showing local placeholder estimate."
+          "We could not generate a full AI estimate, so this is a rough estimate. Please review before saving."
         );
 
         setEstimate({
@@ -270,6 +277,7 @@ export default function MealResultScreen() {
           confidence: localEstimate.confidence,
           explanation: localEstimate.explanation,
           source: "Local fallback",
+          estimateLabel,
           ...modeCopy,
         });
       } finally {
@@ -289,6 +297,8 @@ export default function MealResultScreen() {
     mealName,
     optionalDetails,
     imageUri,
+    portion,
+    mealTimeLabel,
     combinedDescription,
     params.editedCalories,
     params.editedProtein,
@@ -311,6 +321,8 @@ export default function MealResultScreen() {
         mealName,
         optionalDetails,
         imageUri,
+        portion,
+        mealTimeLabel,
         calories: estimate.calories.toString(),
         protein: estimate.protein.toString(),
         carbs: estimate.carbs.toString(),
@@ -340,13 +352,19 @@ export default function MealResultScreen() {
         fatG: estimate.fat,
         confidence: estimate.confidence,
         source: estimate.source,
-        notes: optionalDetails,
+        notes: [optionalDetails, `Portion: ${portion}`, `Meal time: ${mealTimeLabel}`]
+          .filter(Boolean)
+          .join(" • "),
       });
 
       if (cloudResult.ok) {
-        setSaveMessage("Saved to cloud.");
+        setSaveMessage("Saved.");
       } else {
-        setSaveMessage(cloudResult.message);
+        setSaveMessage(
+          cloudResult.message.toLowerCase().startsWith("sign in")
+            ? "Sign in from Profile to sync this meal across sessions."
+            : "Saved to today on this device."
+        );
       }
 
       router.push({
@@ -366,13 +384,13 @@ export default function MealResultScreen() {
       const message =
         error instanceof Error
           ? error.message
-          : "Meal could not be saved to cloud.";
+          : "Meal could not be saved.";
 
       setSaveMessage(message);
 
       showMessage(
-        "Cloud save failed",
-        "The meal will still be added locally for this demo."
+        "Save failed",
+        "The meal will still be added to today on this device."
       );
 
       router.push({
@@ -404,7 +422,7 @@ export default function MealResultScreen() {
             <Text style={styles.loadingStep}>
               {imageUri ? "✓ Preparing photo for AI" : "✓ Text-only estimate"}
             </Text>
-            <Text style={styles.loadingStep}>✓ Connecting to {API_CONFIG_LABEL}</Text>
+            <Text style={styles.loadingStep}>✓ Portion: {portion}</Text>
             <Text style={styles.loadingStep}>✓ Calculating calories and macros</Text>
           </View>
 
@@ -457,9 +475,19 @@ export default function MealResultScreen() {
             <Text style={styles.optionalText}>{optionalDetails}</Text>
           ) : null}
 
+          <View style={styles.detailRow}>
+            <View style={styles.detailPill}>
+              <Text style={styles.detailPillText}>{portion}</Text>
+            </View>
+
+            <View style={styles.detailPill}>
+              <Text style={styles.detailPillText}>{mealTimeLabel}</Text>
+            </View>
+          </View>
+
           <View style={styles.sourceBadge}>
             <Text style={styles.sourceBadgeText}>
-              Estimate source: {estimate.source}
+              {estimate.estimateLabel}
             </Text>
           </View>
 
@@ -533,7 +561,7 @@ export default function MealResultScreen() {
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          AI estimates are approximate. Signed-in users save meals to Supabase cloud.
+          AI estimates are approximate. Signed-in users can sync saved meals.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -677,6 +705,23 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 14,
     lineHeight: 20,
+  },
+  detailRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  detailPill: {
+    backgroundColor: colors.border,
+    borderRadius: radius.pill,
+    paddingVertical: 7,
+    paddingHorizontal: 11,
+  },
+  detailPillText: {
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: "900",
   },
   sourceBadge: {
     alignSelf: "flex-start",

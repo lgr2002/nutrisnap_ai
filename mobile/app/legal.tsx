@@ -56,8 +56,8 @@ export default function LegalScreen() {
             optional details, nutrition targets, saved meals, and account details.
           </Text>
           <Text style={styles.bodyText}>
-            If you upload a meal photo, the image may be sent to the backend and AI
-            provider to generate a nutrition estimate. Avoid uploading sensitive,
+            If you upload a meal photo, the image may be sent to an analysis
+            service to generate a nutrition estimate. Avoid uploading sensitive,
             private, or non-food images.
           </Text>
         </View>
@@ -86,8 +86,8 @@ export default function LegalScreen() {
           <Text style={styles.sectionTitle}>Acceptable use</Text>
           <Text style={styles.bodyText}>
             Do not use NutriSnap AI to upload harmful, illegal, abusive, or
-            non-consensual content. Do not attempt to misuse the app, backend, API
-            keys, or cloud services.
+            non-consensual content. Do not attempt to misuse the app or its
+            services.
           </Text>
         </View>
 

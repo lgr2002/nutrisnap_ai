@@ -4,7 +4,7 @@ import {
   safeSetItem,
 } from "@/src/storage/safeStorage";
 
-const ONBOARDING_COMPLETED_KEY = "nutrisnap_onboarding_completed_v1";
+const ONBOARDING_COMPLETED_KEY = "nutrisnap_onboarding_completed_v3";
 
 export async function markOnboardingCompleted() {
   try {
@@ -31,3 +31,11 @@ export async function resetOnboardingState() {
     console.error("Failed to reset onboarding state:", error);
   }
 }
+
+/**
+ * Compatibility aliases.
+ * These prevent old/new screens from breaking if they use different names.
+ */
+export const saveOnboardingComplete = markOnboardingCompleted;
+export const loadOnboardingComplete = hasCompletedOnboarding;
+export const resetOnboardingComplete = resetOnboardingState;

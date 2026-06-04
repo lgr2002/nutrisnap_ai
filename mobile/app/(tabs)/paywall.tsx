@@ -1,7 +1,5 @@
 import { router } from "expo-router";
 import {
-  Alert,
-  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -10,43 +8,8 @@ import {
   View,
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
-import { setPremiumStatus, resetPremiumStatus } from "@/src/storage/subscriptionStorage";
-import { resetTodayScanCount } from "@/src/storage/scanUsageStorage";
 
 export default function PaywallScreen() {
-  const activatePremium = async () => {
-    await setPremiumStatus(true);
-
-    if (Platform.OS === "web") {
-      router.replace("/scan");
-      return;
-    }
-
-    Alert.alert("Premium unlocked", "Unlimited scans are enabled for this demo.", [
-      {
-        text: "Continue",
-        onPress: () => router.replace("/scan"),
-      },
-    ]);
-  };
-
-  const resetDemoPremium = async () => {
-    await resetPremiumStatus();
-    await resetTodayScanCount();
-
-    if (Platform.OS === "web") {
-      router.replace("/scan");
-      return;
-    }
-
-    Alert.alert("Demo reset", "You are back on the free plan.", [
-      {
-        text: "OK",
-        onPress: () => router.replace("/scan"),
-      },
-    ]);
-  };
-
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -55,20 +18,20 @@ export default function PaywallScreen() {
         </TouchableOpacity>
 
         <View style={styles.header}>
-          <Text style={styles.badge}>Premium</Text>
-          <Text style={styles.title}>Unlock unlimited AI meal scans</Text>
+          <Text style={styles.badge}>Premium coming soon</Text>
+          <Text style={styles.title}>More tracking tools are on the way</Text>
           <Text style={styles.subtitle}>
-            Free users get 3 AI scans per day. Premium gives unlimited scans,
-            advanced coach insights, weekly reports and better tracking tools.
+            Free users get 3 AI scans per day during friends testing. Premium
+            features are not available to purchase yet.
           </Text>
         </View>
 
         <View style={styles.featureCard}>
-          <Text style={styles.featureTitle}>What Premium includes</Text>
+          <Text style={styles.featureTitle}>Planned Premium features</Text>
 
           <View style={styles.featureRow}>
             <Text style={styles.check}>✓</Text>
-            <Text style={styles.featureText}>Unlimited AI calorie estimates</Text>
+            <Text style={styles.featureText}>Higher scan limits</Text>
           </View>
 
           <View style={styles.featureRow}>
@@ -78,7 +41,7 @@ export default function PaywallScreen() {
 
           <View style={styles.featureRow}>
             <Text style={styles.check}>✓</Text>
-            <Text style={styles.featureText}>Advanced AI coach recommendations</Text>
+            <Text style={styles.featureText}>Advanced coach recommendations</Text>
           </View>
 
           <View style={styles.featureRow}>
@@ -87,42 +50,37 @@ export default function PaywallScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.planCard} onPress={activatePremium}>
+        <View style={styles.planCard}>
           <View>
             <Text style={styles.planName}>Monthly</Text>
-            <Text style={styles.planMeta}>Flexible access</Text>
+            <Text style={styles.planMeta}>Planned option</Text>
           </View>
 
           <View style={styles.priceWrap}>
-            <Text style={styles.price}>$9.99</Text>
-            <Text style={styles.priceMeta}>/ month</Text>
+            <Text style={styles.price}>Soon</Text>
+            <Text style={styles.priceMeta}>Not available yet</Text>
           </View>
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity style={[styles.planCard, styles.bestPlan]} onPress={activatePremium}>
+        <View style={[styles.planCard, styles.bestPlan]}>
           <View>
-            <Text style={styles.bestBadge}>Best value</Text>
+            <Text style={styles.bestBadge}>Planned</Text>
             <Text style={styles.planName}>Yearly</Text>
-            <Text style={styles.planMeta}>Save compared with monthly</Text>
+            <Text style={styles.planMeta}>Planned option</Text>
           </View>
 
           <View style={styles.priceWrap}>
-            <Text style={styles.price}>$69.99</Text>
-            <Text style={styles.priceMeta}>/ year</Text>
+            <Text style={styles.price}>Soon</Text>
+            <Text style={styles.priceMeta}>Not available yet</Text>
           </View>
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity style={styles.primaryButton} onPress={activatePremium}>
-          <Text style={styles.primaryButtonText}>Start Premium Demo</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.secondaryButton} onPress={resetDemoPremium}>
-          <Text style={styles.secondaryButtonText}>Reset to Free Demo</Text>
+        <TouchableOpacity style={styles.primaryButton} onPress={() => router.back()}>
+          <Text style={styles.primaryButtonText}>Premium coming soon</Text>
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          This is a demo paywall. Real subscriptions will be added later using
-          RevenueCat and App Store / Google Play billing.
+          Purchases and subscriptions are not enabled in this test version.
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { colors, radius, spacing } from "@/src/theme";
 import { mockTargets, mockUser } from "@/src/data/mockData";
+import { hasCompletedOnboarding } from "@/src/storage/onboardingStorage";
 import { CloudMeal, deleteCloudMeal, loadTodayCloudMeals } from "@/src/api/mealCloudApi";
 
 type LocalMeal = {
@@ -103,7 +104,18 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadMeals();
+      const checkOnboardingAndLoad = async () => {
+        const completed = await hasCompletedOnboarding();
+
+        if (!completed) {
+          router.replace("/welcome");
+          return;
+        }
+
+        await loadMeals();
+      };
+
+      checkOnboardingAndLoad();
     }, [])
   );
 
@@ -209,10 +221,6 @@ export default function HomeScreen() {
         onPress: removeMeal,
       },
     ]);
-  };
-
-  const resetLocalMeals = () => {
-    setMeals([]);
   };
 
   const aiInsight =
@@ -340,7 +348,7 @@ export default function HomeScreen() {
             <View key={meal.id} style={styles.mealCard}>
               <View style={styles.mealTextWrap}>
                 <Text style={styles.mealTime}>
-                  {meal.time || "Now"} · {meal.source === "cloud" ? "Cloud" : "Local"}
+                  {meal.time || "Now"}
                 </Text>
                 <Text style={styles.mealName}>{meal.name}</Text>
                 <Text style={styles.mealMeta}>
@@ -365,12 +373,11 @@ export default function HomeScreen() {
           <Text style={styles.primaryButtonText}>+ Scan Meal</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.secondaryButton} onPress={loadMeals}>
-          <Text style={styles.secondaryButtonText}>Refresh cloud meals</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.dangerButton} onPress={resetLocalMeals}>
-          <Text style={styles.dangerButtonText}>Clear visible meals</Text>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => loadMeals()}
+        >
+          <Text style={styles.secondaryButtonText}>Refresh meals</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

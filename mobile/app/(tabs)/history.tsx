@@ -107,7 +107,7 @@ export default function HistoryScreen() {
       return;
     }
 
-    Alert.alert("Delete meal?", `Remove ${meal.meal_name} from cloud history?`, [
+    Alert.alert("Delete meal?", `Remove ${meal.meal_name} from history?`, [
       {
         text: "Cancel",
         style: "cancel",
@@ -128,7 +128,7 @@ export default function HistoryScreen() {
       <SafeAreaView style={styles.screen}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={styles.loadingText}>Loading cloud history...</Text>
+          <Text style={styles.loadingText}>Loading history...</Text>
         </View>
       </SafeAreaView>
     );
@@ -149,18 +149,18 @@ export default function HistoryScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>History</Text>
-            <Text style={styles.subtitle}>Your saved meals from Supabase.</Text>
+            <Text style={styles.subtitle}>Your saved meals.</Text>
           </View>
         </View>
 
         <View style={styles.statusCard}>
-          <Text style={styles.statusLabel}>Cloud History</Text>
+          <Text style={styles.statusLabel}>Sync Status</Text>
           <Text style={styles.statusText}>{statusMessage}</Text>
         </View>
 
         {meals.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No cloud meals yet</Text>
+            <Text style={styles.emptyTitle}>No meals yet</Text>
             <Text style={styles.emptyText}>
               Save a meal while signed in and it will appear here.
             </Text>
@@ -180,7 +180,6 @@ export default function HistoryScreen() {
                       <Text style={styles.mealName}>{meal.meal_name}</Text>
                       <Text style={styles.mealMeta}>
                         {meal.confidence} confidence
-                        {meal.source ? ` • ${meal.source}` : ""}
                       </Text>
                     </View>
 
